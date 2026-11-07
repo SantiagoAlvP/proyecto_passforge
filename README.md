@@ -64,6 +64,22 @@ passforge/
 ├── .gitignore
 └── README.md
 ```
-=======
-# proyecto_passforge
-Proyecto de Integración continua de software. En este proyecto se desarrolla la aplicación PassForge, generador de contraseñas.
+
+## Pruebas
+
+Desde `backend/`, con el entorno virtual activo:
+
+```bash
+pip install -r requirements-dev.txt
+playwright install chromium          # solo la primera vez (pruebas E2E)
+```
+
+| Comando | Qué ejecuta |
+|---------|-------------|
+| `pytest -m "not e2e"` | Pruebas unitarias (`tests/unit`) |
+| `pytest -m "not e2e" --cov --cov-report=term-missing --cov-report=html` | Unitarias + reporte de cobertura (líneas y ramas) en consola y en `htmlcov/index.html` |
+| `pytest -m e2e` | Prueba de aceptación con Playwright: levanta backend y frontend y usa un navegador real |
+| `pytest -m e2e --headed --slowmo 500` | La misma prueba, viendo el navegador |
+| `pytest` | Todo |
+
+Las pruebas E2E usan los puertos 8000 y 5500: deben estar libres.
