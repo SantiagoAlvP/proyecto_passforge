@@ -1,0 +1,6 @@
+# Dependencias de desarrollo y pruebas (no van en la imagen de producción).
+-r requirements.txt
+pytest==9.2.0
+pytest-cov==7.1.0
+playwright==1.64.1
+pytest-playwright==0.10.0
