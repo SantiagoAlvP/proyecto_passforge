@@ -1,0 +1,7 @@
+# Dependencias de ejecución (versiones fijadas para builds reproducibles).
+Flask==3.1.3
+flask-cors==6.0.5
+Flask-Limiter==4.1.1
+python-dotenv==1.2.4
+# Servidor WSGI de producción (se usará al dockerizar).
+gunicorn==26.2.0

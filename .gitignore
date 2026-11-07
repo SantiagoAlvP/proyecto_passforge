@@ -1,0 +1,30 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# --- Variables de entorno (pueden contener secretos) ---
+.env
+.env.*
+!.env.example
+
+# --- Pruebas y cobertura ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+test-results/
+playwright-report/
+
+# --- Node (por si se usa en el futuro) ---
+node_modules/
+
+# --- Editores / SO ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,531 @@
+/* ==========================================================================
+   PassForge · estilos
+   Paleta acero/tinta. El único elemento protagonista es la "placa" donde
+   aparece la contraseña; todo lo demás se mantiene sobrio.
+   ========================================================================== */
+
+:root {
+  --bg: #e8edf1;
+  --surface: #f7f9fa;
+  --ink: #14213d;
+  --ink-hover: #22345c;
+  --muted: #56657a;
+  --line: #c6d0da;
+  --focus: #c08a2e;
+
+  --plate: #1c2a42;
+  --plate-ink: #eef2f6;
+  --plate-muted: #9eacc0;
+  --plate-digit: #8cc4f0;
+  --plate-symbol: #f0b35a;
+
+  --danger: #a8231a;
+  --danger-bg: #fbe9e7;
+
+  /* Colores de fortaleza: 0 muy débil → 4 muy fuerte */
+  --s0: #b42318;
+  --s1: #c2540a;
+  --s2: #9a7400;
+  --s3: #2e7d4f;
+  --s4: #1a6f8f;
+  --meter-track: #cfd8e1;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141c28;
+    --surface: #1b2534;
+    --ink: #e4eaf1;
+    --ink-hover: #ffffff;
+    --muted: #9aa8ba;
+    --line: #2f3d52;
+    --plate: #223049;
+    --danger: #ff8a7a;
+    --danger-bg: #3a1d1d;
+    --s0: #f0705f;
+    --s1: #f08a3c;
+    --s2: #e0b93a;
+    --s3: #5cc28a;
+    --s4: #5bb8dc;
+    --meter-track: #2f3d52;
+  }
+}
+
+/* --- Base ----------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- Layout --------------------------------------------------------------- */
+.page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3.5rem 1rem 4rem;
+}
+
+.masthead {
+  margin-bottom: 2rem;
+}
+
+.masthead__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+h1 {
+  font-size: clamp(2.25rem, 6vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lede {
+  margin-top: 0.5rem;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 1.125rem;
+}
+
+/* --- Estado del API ------------------------------------------------------- */
+.api-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.api-status__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.api-status[data-state="online"] .api-status__dot {
+  background: var(--s3);
+}
+
+.api-status[data-state="offline"] .api-status__dot {
+  background: var(--s0);
+}
+
+/* --- Placa de la contraseña (elemento protagonista) ----------------------- */
+.plate {
+  --s0: #f0705f;
+  --s1: #f08a3c;
+  --s2: #e0b93a;
+  --s3: #5cc28a;
+  --s4: #5bb8dc;
+  --meter-track: rgb(255 255 255 / 0.16);
+
+  position: relative;
+  padding: 1.75rem 1.5rem 1.25rem 3.25rem;
+  border-radius: var(--radius-lg);
+  background: var(--plate);
+  color: var(--plate-ink);
+}
+
+/* Orificio de llavero */
+.plate::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 1.1rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 2px rgb(0 0 0 / 0.35);
+  transform: translateY(-50%);
+}
+
+.plate__password {
+  display: block;
+  min-height: 3.2rem;
+  font-family: var(--font-mono);
+  font-size: clamp(1.35rem, 4.6vw, 2.1rem);
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+.plate__password[data-empty="true"] {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  letter-spacing: 0;
+  color: var(--plate-muted);
+}
+
+.char--digit {
+  color: var(--plate-digit);
+}
+
+.char--symbol {
+  color: var(--plate-symbol);
+}
+
+.plate__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.plate__strength {
+  flex: 1;
+  color: var(--plate-muted);
+  font-size: 0.95rem;
+}
+
+.plate__strength .strength__label {
+  color: var(--plate-ink);
+}
+
+/* --- Medidor de fortaleza: 5 cortes ascendentes, como los de una llave ---- */
+.meter {
+  --meter-color: transparent;
+  display: inline-flex;
+  flex: none;
+  align-items: flex-end;
+  gap: 3px;
+  height: 1.15rem;
+}
+
+.meter span {
+  width: 0.4rem;
+  border-radius: 2px;
+  background: var(--meter-track);
+  transition: background-color 0.2s ease;
+}
+
+.meter span:nth-child(1) { height: 30%; }
+.meter span:nth-child(2) { height: 47%; }
+.meter span:nth-child(3) { height: 64%; }
+.meter span:nth-child(4) { height: 82%; }
+.meter span:nth-child(5) { height: 100%; }
+
+.meter[data-score="0"] { --meter-color: var(--s0); }
+.meter[data-score="1"] { --meter-color: var(--s1); }
+.meter[data-score="2"] { --meter-color: var(--s2); }
+.meter[data-score="3"] { --meter-color: var(--s3); }
+.meter[data-score="4"] { --meter-color: var(--s4); }
+
+.meter[data-score="0"] span:nth-child(-n + 1),
+.meter[data-score="1"] span:nth-child(-n + 2),
+.meter[data-score="2"] span:nth-child(-n + 3),
+.meter[data-score="3"] span:nth-child(-n + 4),
+.meter[data-score="4"] span:nth-child(-n + 5) {
+  background: var(--meter-color);
+}
+
+.strength__bits {
+  color: var(--muted);
+}
+
+.plate .strength__bits {
+  color: var(--plate-muted);
+}
+
+/* --- Botones -------------------------------------------------------------- */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.button--primary {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--ink-hover);
+}
+
+.button--ghost {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.button--ghost:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.button--on-plate {
+  flex: none;
+  padding: 0.5rem 1rem;
+  border-color: rgb(255 255 255 / 0.28);
+  background: transparent;
+  color: var(--plate-ink);
+}
+
+.button--on-plate:hover:not(:disabled) {
+  border-color: var(--plate-ink);
+}
+
+/* --- Formulario del generador -------------------------------------------- */
+.options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+}
+
+.field-length {
+  display: grid;
+  grid-template-columns: auto 1fr 3ch;
+  align-items: center;
+  gap: 1rem;
+}
+
+.field-length label {
+  font-weight: 600;
+}
+
+.field-length input {
+  width: 100%;
+  accent-color: var(--ink);
+}
+
+.field-length__value {
+  font-family: var(--font-mono);
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.charsets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.charsets legend {
+  margin-bottom: 0.5rem;
+  padding: 0;
+  font-weight: 600;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.check:has(input:checked) {
+  border-color: var(--ink);
+}
+
+.check input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.check__sample {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.check--plain {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.check--plain:has(input:checked) {
+  border: 0;
+}
+
+.check--plain .check__sample {
+  margin-left: 0.25rem;
+}
+
+.options .button--primary {
+  justify-self: start;
+}
+
+/* --- Comprobador ---------------------------------------------------------- */
+.checker {
+  margin-top: 3.5rem;
+  padding-top: 2.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.checker h2 {
+  font-size: 1.5rem;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+.hint {
+  margin-top: 0.35rem;
+  color: var(--muted);
+}
+
+.checker__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.checker__form > label {
+  font-weight: 600;
+}
+
+.input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+}
+
+.input-row input:focus-visible {
+  border-color: var(--ink);
+}
+
+.checker__form .button--primary {
+  justify-self: start;
+}
+
+.result {
+  margin-top: 1.5rem;
+}
+
+.result__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.05rem;
+}
+
+.result__feedback {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+}
+
+.result__feedback li + li {
+  margin-top: 0.25rem;
+}
+
+/* --- Errores -------------------------------------------------------------- */
+.error {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* --- Responsive y accesibilidad ------------------------------------------ */
+@media (max-width: 30rem) {
+  .page {
+    padding-top: 2rem;
+  }
+
+  .plate {
+    padding-left: 2.75rem;
+  }
+
+  .plate::before {
+    left: 0.9rem;
+  }
+
+  .plate__footer {
+    flex-wrap: wrap;
+  }
+
+  .options .button--primary,
+  .checker__form .button--primary {
+    justify-self: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

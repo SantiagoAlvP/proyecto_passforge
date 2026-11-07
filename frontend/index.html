@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Content Security Policy: solo se cargan scripts, estilos e imágenes
+    propios (sin código inline ni terceros) y solo se habla con el backend.
+    Si cambias el puerto del API, actualiza también connect-src.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>PassForge · Generador de contraseñas</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main class="page">
+    <header class="masthead">
+      <div class="masthead__top">
+        <h1>PassForge</h1>
+        <p class="api-status" data-state="checking" role="status" data-testid="api-status">
+          <span class="api-status__dot" aria-hidden="true"></span>
+          <span class="api-status__text">Conectando con el servidor…</span>
+        </p>
+      </div>
+      <p class="lede">Genera contraseñas aleatorias seguras y comprueba qué tan fuertes son las tuyas.</p>
+    </header>
+
+    <!-- Generador -->
+    <section class="generator" aria-labelledby="generator-title">
+      <h2 id="generator-title" class="visually-hidden">Generar contraseña</h2>
+
+      <div class="plate">
+        <output id="password-output" class="plate__password" data-empty="true"
+                aria-live="polite" data-testid="password-output">Elige las opciones y pulsa «Generar contraseña».</output>
+        <div class="plate__footer">
+          <div class="meter" id="generated-meter" data-score="" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <p class="plate__strength" id="generated-strength" data-testid="generated-strength"></p>
+          <button type="button" id="copy-button" class="button button--on-plate"
+                  data-testid="copy-button" disabled>Copiar</button>
+        </div>
+      </div>
+
+      <form id="generator-form" class="options" novalidate>
+        <div class="field-length">
+          <label for="length">Longitud</label>
+          <input type="range" id="length" name="length" min="8" max="128" value="16"
+                 data-testid="length-input">
+          <output id="length-value" for="length" class="field-length__value">16</output>
+        </div>
+
+        <fieldset class="charsets">
+          <legend>Incluir</legend>
+          <label class="check">
+            <input type="checkbox" name="include_lowercase" checked data-testid="include-lowercase">
+            Minúsculas <span class="check__sample" aria-hidden="true">abc</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="include_uppercase" checked data-testid="include-uppercase">
+            Mayúsculas <span class="check__sample" aria-hidden="true">ABC</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="include_digits" checked data-testid="include-digits">
+            Números <span class="check__sample" aria-hidden="true">123</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="include_symbols" checked data-testid="include-symbols">
+            Símbolos <span class="check__sample" aria-hidden="true">#$&amp;</span>
+          </label>
+        </fieldset>
+
+        <label class="check check--plain">
+          <input type="checkbox" name="exclude_ambiguous" data-testid="exclude-ambiguous">
+          Evitar caracteres que se confunden <span class="check__sample" aria-hidden="true">Il1O0o</span>
+        </label>
+
+        <p class="error" id="generator-error" role="alert" data-testid="generator-error" hidden></p>
+
+        <button type="submit" class="button button--primary" data-testid="generate-button">
+          Generar contraseña
+        </button>
+      </form>
+    </section>
+
+    <!-- Comprobador de fortaleza -->
+    <section class="checker" aria-labelledby="checker-title">
+      <h2 id="checker-title">Comprueba tu contraseña</h2>
+      <p class="hint">Se envía al servidor solo para evaluarla. No se guarda ni se registra.</p>
+
+      <form id="checker-form" class="checker__form" novalidate>
+        <label for="check-password">Contraseña</label>
+        <div class="input-row">
+          <input type="password" id="check-password" name="password" maxlength="128"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 data-testid="check-input">
+          <button type="button" id="toggle-visibility" class="button button--ghost"
+                  aria-controls="check-password" aria-pressed="false">Mostrar</button>
+        </div>
+
+        <p class="error" id="checker-error" role="alert" data-testid="checker-error" hidden></p>
+
+        <button type="submit" class="button button--primary" data-testid="check-button">
+          Comprobar
+        </button>
+      </form>
+
+      <div class="result" id="check-result" aria-live="polite" data-testid="check-result" hidden>
+        <div class="result__summary">
+          <div class="meter" id="check-meter" data-score="" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <p class="result__label" id="check-strength" data-testid="check-strength"></p>
+        </div>
+        <ul class="result__feedback" id="check-feedback" data-testid="check-feedback"></ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
