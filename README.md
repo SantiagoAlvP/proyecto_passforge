@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # PassForge
 
 Generador de contraseñas aleatorias seguras con comprobador de fortaleza.
@@ -67,4 +67,3 @@ passforge/
 =======
 # proyecto_passforge
 Proyecto de Integración continua de software. En este proyecto se desarrolla la aplicación PassForge, generador de contraseñas.
->>>>>>> 423fa58e70fd5922cfc28d99098fe9ecf9ca0946
