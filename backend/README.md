@@ -5,13 +5,17 @@ una contraseña. No guarda nada: no tiene base de datos ni registra contraseñas
 
 ## Requisitos
 
-- Python 3.10 o superior
+- Python 3.10 o superior (recomendado 3.13)
+
+> **macOS:** el `python3` que trae el sistema (`/usr/bin/python3`) es 3.9 y
+> **no sirve**. Instala uno reciente con `brew install python@3.13` y crea el
+> entorno virtual con `python3.13 -m venv .venv`.
 
 ## Puesta en marcha
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.13 -m venv .venv          # Python 3.10+ (en macOS no uses el python3 del sistema)
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env               # ajusta los valores si hace falta
@@ -108,13 +112,49 @@ backend/
 │   │   └── routes.py            # endpoints /api/v1 (capa HTTP delgada)
 │   └── services/
 │       └── password_service.py  # lógica de negocio pura (sin Flask)
+├── tests/
+│   ├── conftest.py              # fixtures compartidas (app, client, make_app)
+│   ├── unit/                    # pruebas unitarias
+│   ├── module/                  # pruebas modulares
+│   └── integration/             # pruebas de integración
 ├── wsgi.py                      # punto de entrada
-├── requirements.txt
+├── pyproject.toml               # configuración de pytest y coverage
+├── requirements.txt             # dependencias de ejecución
+├── requirements-dev.txt         # + dependencias de pruebas
 └── .env.example
 ```
 
 La lógica está separada en capas: **rutas** (HTTP) → **validadores** →
 **servicios** (lógica pura). Así cada pieza se puede probar por separado.
+
+## Pruebas
+
+Las pruebas están organizadas en tres niveles. Todas siguen la estrategia
+**AAA** (*Arrange, Act, Assert*).
+
+| Nivel | Carpeta | Qué prueba | Cómo |
+|---|---|---|---|
+| **Unitarias** | `tests/unit/` | Una función o clase | Aislada; el azar o las dependencias se reemplazan por dobles de prueba (`monkeypatch`) |
+| **Modulares** | `tests/module/` | Un módulo completo (servicio, validación, config, errores, seguridad) | Por su interfaz pública, con sus partes reales, sin el resto de la app (o en una app Flask vacía) |
+| **Integración** | `tests/integration/` | La app completa | `create_app()` sin dobles: CORS, rate limit, validación, servicio, errores y cabeceras juntos; incluye un servidor HTTP real |
+
+```bash
+pip install -r requirements-dev.txt
+
+pytest                      # todas las pruebas
+pytest -v                   # con el nombre de cada prueba
+pytest -m unit              # solo un nivel: unit | module | integration
+pytest tests/integration    # o por carpeta
+```
+
+### Cobertura
+
+```bash
+pytest --cov --cov-report=term-missing   # reporte en consola
+pytest --cov --cov-report=html           # reporte visual en htmlcov/index.html
+```
+
+Se mide la cobertura de **líneas y ramas** (`branch = true` en `pyproject.toml`).
 
 ## Medidas de seguridad aplicadas
 

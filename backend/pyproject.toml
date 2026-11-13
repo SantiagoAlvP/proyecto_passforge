@@ -1,0 +1,30 @@
+# Configuración de las herramientas de desarrollo del backend.
+
+[tool.pytest.ini_options]
+# Dónde buscar las pruebas.
+testpaths = ["tests"]
+# Permite que las pruebas hagan "from app import ..." sin instalar el paquete.
+pythonpath = ["."]
+# -ra: al final muestra un resumen de pruebas omitidas o fallidas.
+# --strict-markers: falla si se usa un marcador que no está registrado abajo.
+addopts = "-ra --strict-markers"
+# Niveles de prueba. Se pueden ejecutar por separado: pytest -m unit
+markers = [
+    "unit: pruebas unitarias (una función o clase, aislada; a veces con dobles de prueba)",
+    "module: pruebas modulares (un módulo completo por su interfaz pública, independiente del resto)",
+    "integration: pruebas de integración (la app completa, con todas sus capas juntas)",
+]
+
+[tool.coverage.run]
+# Medir solo nuestro código (no las librerías ni las propias pruebas).
+source = ["app"]
+# Medir también RAMAS (cada camino de un if), no solo líneas.
+branch = true
+
+[tool.coverage.report]
+# Mostrar los números de línea que no se ejecutaron.
+show_missing = true
+skip_empty = true
+
+[tool.coverage.html]
+directory = "htmlcov"

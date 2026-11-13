@@ -1,0 +1,6 @@
+# Dependencias de DESARROLLO y PRUEBAS (no se instalan en producción).
+# La primera línea instala también las dependencias de ejecución.
+-r requirements.txt
+
+pytest==9.2.0       # framework de pruebas
+pytest-cov==7.1.0   # mide la cobertura de código (usa coverage.py)

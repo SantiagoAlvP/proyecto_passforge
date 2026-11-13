@@ -38,7 +38,7 @@ Terminal 1 — backend:
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.13 -m venv .venv          # Python 3.10+ (en macOS no uses el python3 del sistema)
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
@@ -53,6 +53,17 @@ python3 -m http.server 5500 --bind 127.0.0.1
 ```
 
 Abre <http://127.0.0.1:5500>.
+
+## Pruebas
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest --cov --cov-report=term-missing
+```
+
+Pruebas unitarias, modulares y de integración; detalle en
+[`backend/README.md`](backend/README.md#pruebas).
 
 ## Estructura
 

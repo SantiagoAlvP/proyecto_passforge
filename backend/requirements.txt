@@ -1,3 +1,4 @@
+# Requiere Python >= 3.10 (Flask-Limiter 4.x no soporta versiones anteriores).
 # Dependencias de ejecución (versiones fijadas para builds reproducibles).
 Flask==3.1.3
 flask-cors==6.0.5
