@@ -1,6 +1,8 @@
 # Imagen del frontend de PassForge: archivos estáticos servidos con nginx.
 # Variante "unprivileged": nginx corre sin root y escucha en el puerto 8080.
-FROM nginxinc/nginx-unprivileged:1.30-alpine
+# Registro oficial actual: nginx/nginx-unprivileged (el anterior,
+# nginxinc/nginx-unprivileged, dejó de actualizarse en nginx 1.30.6).
+FROM nginx/nginx-unprivileged:1.30-alpine
 
 # Solo durante la construcción se usa root (para copiar y ajustar permisos);
 # al final se vuelve al usuario sin privilegios.
@@ -17,10 +19,13 @@ COPY css/ /usr/share/nginx/html/css/
 COPY js/ /usr/share/nginx/html/js/
 COPY assets/ /usr/share/nginx/html/assets/
 
-# Permisos explícitos (no dependen de los del equipo donde se construye):
-# todo es de root y nginx solo puede leerlo, excepto config.js, que el script
-# reescribe al iniciar el contenedor.
-RUN chmod -R a+rX /usr/share/nginx/html /etc/nginx/conf.d /etc/nginx/snippets \
+# - Actualiza los paquetes del sistema para incluir los parches de seguridad
+#   publicados después de la imagen base (Trivy bloquea los CRITICAL).
+# - Permisos explícitos (no dependen de los del equipo donde se construye):
+#   todo es de root y nginx solo puede leerlo, excepto config.js, que el
+#   script reescribe al iniciar el contenedor.
+RUN apk upgrade --no-cache \
+    && chmod -R a+rX /usr/share/nginx/html /etc/nginx/conf.d /etc/nginx/snippets \
     && chmod 0755 /docker-entrypoint.d/40-passforge-config.sh \
     && chown 101:101 /usr/share/nginx/html/js/config.js
 
