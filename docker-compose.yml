@@ -1,0 +1,26 @@
+# Simula en local la arquitectura de AWS:
+#   gateway (hace de ALB) -> /api/* -> backend
+#                         -> /*     -> frontend
+services:
+  backend:
+    build: ./backend
+    environment:
+      APP_ENV: production
+      CORS_ORIGINS: http://localhost:8080
+      TRUST_PROXY: "true"
+      APP_VERSION: local
+
+  frontend:
+    build: ./frontend
+
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
