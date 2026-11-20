@@ -1,0 +1,4 @@
+# Dependencias de las pruebas de ACEPTACIÓN (navegador real con Selenium).
+pytest==9.2.0
+pytest-html==4.2.0
+selenium==4.52.0

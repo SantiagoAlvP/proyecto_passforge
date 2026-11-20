@@ -42,10 +42,14 @@ class TestErrorResponse:
 
         # Assert
         assert status == 404
-        assert response.get_json() == {"error": {"code": "not_found", "message": "No existe."}}
+        assert response.get_json() == {
+            "error": {"code": "not_found", "message": "No existe."}
+        }
 
     def test_includes_details_when_given(self, app_context):
-        response, status = error_response(400, "validation_error", "Inválido.", {"campo": "malo"})
+        response, status = error_response(
+            400, "validation_error", "Inválido.", {"campo": "malo"}
+        )
 
         assert status == 400
         assert response.get_json()["error"]["details"] == {"campo": "malo"}

@@ -257,7 +257,11 @@ function init() {
   ui.checkerForm.addEventListener("submit", handleCheck);
   ui.toggleVisibility.addEventListener("click", handleToggleVisibility);
   syncLengthValue();
-  connectToApi();
+  // data-ready indica que la página terminó de conectarse con el API
+  // (lo usan las pruebas de aceptación para no actuar antes de tiempo).
+  connectToApi().finally(() => {
+    document.body.dataset.ready = "true";
+  });
 }
 
 init();

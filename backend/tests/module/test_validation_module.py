@@ -22,7 +22,12 @@ from app.validators import parse_generate_payload, parse_strength_payload
 
 pytestmark = pytest.mark.module
 
-CHARSET_FIELDS = ("include_lowercase", "include_uppercase", "include_digits", "include_symbols")
+CHARSET_FIELDS = (
+    "include_lowercase",
+    "include_uppercase",
+    "include_digits",
+    "include_symbols",
+)
 ALL_CHARSET_COMBINATIONS = [
     combo for size in range(1, 5) for combo in combinations(CHARSET_FIELDS, size)
 ]
@@ -46,7 +51,9 @@ class TestValidationEnforcesThePublishedPolicy:
         payload = {
             "length": policy["length"]["default"],
             "exclude_ambiguous": policy["exclude_ambiguous"]["default"],
-            **{name: info["default"] for name, info in policy["character_sets"].items()},
+            **{
+                name: info["default"] for name, info in policy["character_sets"].items()
+            },
         }
 
         # Act
@@ -68,7 +75,9 @@ class TestValidatedDataWorksWithTheService:
     @pytest.mark.parametrize(
         "charsets", ALL_CHARSET_COMBINATIONS, ids=lambda c: "+".join(n[8:] for n in c)
     )
-    def test_any_valid_payload_produces_a_usable_password(self, charsets, exclude_ambiguous):
+    def test_any_valid_payload_produces_a_usable_password(
+        self, charsets, exclude_ambiguous
+    ):
         # Arrange
         payload = {
             "length": 10,
@@ -85,7 +94,9 @@ class TestValidatedDataWorksWithTheService:
         assert len(password) == 10
         assert set(password) <= allowed
 
-    @pytest.mark.parametrize("text", ["a", "123456", "contraseña", "T7#qL!m9$zR2@vX8", "ñ" * 128])
+    @pytest.mark.parametrize(
+        "text", ["a", "123456", "contraseña", "T7#qL!m9$zR2@vX8", "ñ" * 128]
+    )
     def test_any_accepted_password_can_be_evaluated(self, text):
         # Arrange
         labels = get_password_policy()["strength_labels"]

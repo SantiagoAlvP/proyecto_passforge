@@ -26,6 +26,16 @@ La API queda en `http://127.0.0.1:8000/api/v1`.
 
 > En macOS se usa el puerto **8000** porque el 5000 lo ocupa *AirPlay Receiver*.
 
+### Con Docker
+
+```bash
+docker build -t passforge-backend .
+docker run -p 8000:8000 -e CORS_ORIGINS=http://localhost:8080 passforge-backend
+```
+
+La imagen arranca en modo `production` con Gunicorn y un usuario sin
+privilegios. `CORS_ORIGINS` es obligatorio: sin él, la app no arranca.
+
 ## Endpoints
 
 | Método | Ruta                           | Descripción                                   |
@@ -118,6 +128,7 @@ backend/
 │   ├── module/                  # pruebas modulares
 │   └── integration/             # pruebas de integración
 ├── wsgi.py                      # punto de entrada
+├── Dockerfile                   # imagen de producción (Gunicorn, sin root)
 ├── pyproject.toml               # configuración de pytest y coverage
 ├── requirements.txt             # dependencias de ejecución
 ├── requirements-dev.txt         # + dependencias de pruebas

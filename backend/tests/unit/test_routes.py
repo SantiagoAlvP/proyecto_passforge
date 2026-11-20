@@ -31,10 +31,14 @@ def service_calls(monkeypatch):
 
     def fake_evaluate(password):
         calls["evaluate"].append(password)
-        return StrengthResult(score=1, label="débil", entropy_bits=30.0, feedback=["consejo"])
+        return StrengthResult(
+            score=1, label="débil", entropy_bits=30.0, feedback=["consejo"]
+        )
 
     monkeypatch.setattr(password_service, "generate_password", fake_generate)
-    monkeypatch.setattr(password_service, "strength_of_generated", lambda options: FAKE_STRENGTH)
+    monkeypatch.setattr(
+        password_service, "strength_of_generated", lambda options: FAKE_STRENGTH
+    )
     monkeypatch.setattr(password_service, "evaluate_strength", fake_evaluate)
     return calls
 
@@ -50,7 +54,9 @@ class TestHealthRoute:
 class TestOptionsRoute:
     def test_returns_the_policy_given_by_the_service(self, client, monkeypatch):
         # Arrange
-        monkeypatch.setattr(password_service, "get_password_policy", lambda: {"fake": "policy"})
+        monkeypatch.setattr(
+            password_service, "get_password_policy", lambda: {"fake": "policy"}
+        )
 
         # Act
         response = client.get(f"{API}/passwords/options")
@@ -63,10 +69,14 @@ class TestOptionsRoute:
 class TestGenerateRoute:
     def test_passes_the_validated_options_to_the_service(self, client, service_calls):
         # Act
-        client.post(f"{API}/passwords/generate", json={"length": 20, "include_symbols": False})
+        client.post(
+            f"{API}/passwords/generate", json={"length": 20, "include_symbols": False}
+        )
 
         # Assert
-        assert service_calls["generate"] == [PasswordOptions(length=20, include_symbols=False)]
+        assert service_calls["generate"] == [
+            PasswordOptions(length=20, include_symbols=False)
+        ]
 
     def test_builds_the_response_with_the_service_results(self, client, service_calls):
         # Act
@@ -106,7 +116,9 @@ class TestGenerateRoute:
             {"data": "{malformado", "content_type": "application/json"},  # JSON roto
         ],
     )
-    def test_rejects_json_that_is_not_a_valid_object(self, client, service_calls, kwargs):
+    def test_rejects_json_that_is_not_a_valid_object(
+        self, client, service_calls, kwargs
+    ):
         response = client.post(f"{API}/passwords/generate", **kwargs)
 
         assert response.status_code == 400
@@ -135,7 +147,9 @@ class TestStrengthRoute:
             "feedback": ["consejo"],
         }
 
-    def test_service_is_not_called_when_password_is_missing(self, client, service_calls):
+    def test_service_is_not_called_when_password_is_missing(
+        self, client, service_calls
+    ):
         response = client.post(f"{API}/passwords/strength", json={})
 
         assert response.status_code == 400

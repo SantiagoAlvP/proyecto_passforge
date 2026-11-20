@@ -7,6 +7,11 @@ para que cada instancia de la app (por ejemplo, en pruebas) vea el entorno
 actual.
 """
 
+# Flask solo carga como configuración los atributos en MAYÚSCULAS, por eso
+# se desactiva la regla de nombres; y las clases de configuración son
+# contenedores de valores, no necesitan más métodos públicos.
+# pylint: disable=invalid-name,too-few-public-methods
+
 from __future__ import annotations
 
 import os
@@ -20,6 +25,7 @@ def _parse_list(raw: str) -> list[str]:
 
 
 def _parse_bool(raw: str | None, default: bool = False) -> bool:
+    """Interpreta textos como ``true``, ``1``, ``yes`` u ``on`` como verdadero."""
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
@@ -59,12 +65,16 @@ class BaseConfig:
 
 
 class DevelopmentConfig(BaseConfig):
+    """Desarrollo local: modo debug y orígenes CORS de localhost."""
+
     DEBUG = True
     LOG_LEVEL = "DEBUG"
     default_cors_origins = DEFAULT_DEV_ORIGINS
 
 
 class TestingConfig(BaseConfig):
+    """Pruebas automatizadas."""
+
     TESTING = True
     # Las pruebas hacen muchas peticiones seguidas: no deben ser bloqueadas.
     RATELIMIT_ENABLED = False
@@ -72,9 +82,12 @@ class TestingConfig(BaseConfig):
 
 
 class ProductionConfig(BaseConfig):
+    """Producción: sin debug, con HSTS y CORS obligatorio."""
+
     HSTS_ENABLED = True
 
     def validate(self) -> None:
+        """Exige orígenes CORS explícitos y sin comodín."""
         # "Fail fast": mejor no arrancar que arrancar con una config insegura.
         if not self.CORS_ORIGINS:
             raise RuntimeError("CORS_ORIGINS es obligatorio en producción.")

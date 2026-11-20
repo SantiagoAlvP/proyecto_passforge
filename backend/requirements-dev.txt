@@ -1,6 +1,15 @@
-# Dependencias de DESARROLLO y PRUEBAS (no se instalan en producción).
+# Dependencias de DESARROLLO y PRUEBAS (no se instalan en la imagen Docker).
 # La primera línea instala también las dependencias de ejecución.
+# Versiones exactas: el pipeline y cada integrante usan las mismas herramientas.
 -r requirements.txt
 
-pytest==9.2.0       # framework de pruebas
-pytest-cov==7.1.0   # mide la cobertura de código (usa coverage.py)
+# Análisis estático
+black==26.10.1       # formateador (en el pipeline: black --check)
+pylint==4.1.3        # linter: errores, code smells, convenciones
+flake8==7.5.0        # linter: estilo PEP 8 y complejidad
+
+# Pruebas y cobertura
+pytest==9.2.0        # framework de pruebas
+pytest-cov==7.1.0    # cobertura de código con pytest (usa coverage.py)
+pytest-html==4.2.0   # reporte HTML de las pruebas
+coverage==7.17.2

@@ -39,12 +39,10 @@ def _is_integer(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _check_unknown_fields(data: dict[str, Any], allowed: frozenset[str]) -> dict[str, str]:
-    return {
-        name: "Campo no permitido."
-        for name in sorted(data)
-        if name not in allowed
-    }
+def _check_unknown_fields(
+    data: dict[str, Any], allowed: frozenset[str]
+) -> dict[str, str]:
+    return {name: "Campo no permitido." for name in sorted(data) if name not in allowed}
 
 
 def parse_generate_payload(data: dict[str, Any]) -> PasswordOptions:

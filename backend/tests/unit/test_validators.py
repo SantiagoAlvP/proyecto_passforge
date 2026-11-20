@@ -116,7 +116,9 @@ class TestParseStrengthPayload:
         with pytest.raises(ValidationError) as error:
             parse_strength_payload({"password": password})
 
-        assert error.value.details == {"password": "Debe tener entre 1 y 128 caracteres."}
+        assert error.value.details == {
+            "password": "Debe tener entre 1 y 128 caracteres."
+        }
 
     def test_rejects_unknown_fields(self):
         with pytest.raises(ValidationError) as error:

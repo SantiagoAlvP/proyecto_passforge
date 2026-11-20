@@ -1,0 +1,287 @@
+# Pipeline de Integración Continua (CI) de PassForge.
+#
+# Estrategia de ramas (trunk-based con Pull Requests):
+#   - Pull Request hacia main -> valida el cambio. NO publica nada.
+#   - Push a main (merge)     -> valida y publica las imágenes con <sha> y latest.
+#   - Tag vX.Y.Z              -> valida y publica las imágenes con <sha> y X.Y.Z.
+#   - Manual                  -> valida sin publicar.
+#
+# Etapas: Checkout -> Build -> Test (estáticas, unitarias, cobertura,
+#         aceptación, seguridad) -> Release (imágenes Docker en Docker Hub).
+#
+#   static-analysis ─┬─> sonarcloud ──────────┬─> release
+#   tests ───────────┴─> build-and-acceptance ┘
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Mínimo privilegio: el token de GitHub Actions solo puede leer el repositorio.
+permissions:
+  contents: read
+
+# Si llega un nuevo commit a un mismo PR, se cancela la ejecución anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.13"
+  TRIVY_IMAGE: aquasec/trivy:0.76.2
+  # Nombres de las imágenes: <usuario de Docker Hub>/passforge-<componente>
+  BACKEND_IMAGE: ${{ vars.DOCKERHUB_USERNAME || 'passforge' }}/passforge-backend
+  FRONTEND_IMAGE: ${{ vars.DOCKERHUB_USERNAME || 'passforge' }}/passforge-frontend
+  # Etiqueta única de esta versión del código: el SHA del commit.
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # ------------------------------------------------------------------------- #
+  # 1. Pruebas estáticas: formato, linters y configuración de los Dockerfiles
+  # ------------------------------------------------------------------------- #
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: Run Black (Formatter)
+        run: black --check backend
+
+      - name: Run Pylint (Linter)
+        run: pylint backend/app backend/wsgi.py --exit-zero --output-format=text > pylint-report.txt
+
+      - name: Run Flake8 (Linter)
+        run: flake8 backend/app backend/wsgi.py --exit-zero --output-file=flake8-report.txt
+
+      - name: Scan Dockerfiles for misconfigurations (Trivy)
+        run: >
+          docker run --rm -v "$PWD:/src:ro" "$TRIVY_IMAGE"
+          config --severity HIGH,CRITICAL --exit-code 1 /src
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-reports
+          path: |
+            pylint-report.txt
+            flake8-report.txt
+
+  # ------------------------------------------------------------------------- #
+  # 2. Pruebas unitarias, modulares y de integración + cobertura (>= 80 %)
+  # ------------------------------------------------------------------------- #
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Unit, Module and Integration Tests
+        run: >
+          pytest -v --color=yes
+          --cov --cov-branch --cov-report=term-missing
+          --cov-report=xml --cov-report=html
+          --cov-fail-under=80
+          --html=report.html --self-contained-html
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            backend/coverage.xml
+            backend/htmlcov/
+            backend/report.html
+
+  # ------------------------------------------------------------------------- #
+  # 3. SonarCloud: análisis continuo y Quality Gate
+  # ------------------------------------------------------------------------- #
+  sonarcloud:
+    needs: [static-analysis, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Historial completo: SonarCloud lo usa para el código nuevo
+
+      - name: Download lint reports
+        uses: actions/download-artifact@v8
+        with:
+          name: lint-reports
+          path: .
+
+      - name: Download test reports
+        uses: actions/download-artifact@v8
+        with:
+          name: test-reports
+          path: backend
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+  # ------------------------------------------------------------------------- #
+  # 4. Build de las imágenes, escaneo de seguridad y pruebas de aceptación
+  # ------------------------------------------------------------------------- #
+  build-and-acceptance:
+    needs: [static-analysis, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build backend image
+        run: docker build -t "$BACKEND_IMAGE:$IMAGE_TAG" backend
+
+      - name: Build frontend image
+        run: docker build -t "$FRONTEND_IMAGE:$IMAGE_TAG" frontend
+
+      - name: Scan images for vulnerabilities (Trivy)
+        run: |
+          mkdir -p security-reports
+          # Trivy se ejecuta como contenedor; el volumen trivy-cache evita
+          # descargar dos veces la base de datos de vulnerabilidades.
+          trivy() {
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v trivy-cache:/root/.cache -v "$PWD/security-reports:/reports" \
+              "$TRIVY_IMAGE" "$@"
+          }
+          for image in "$BACKEND_IMAGE:$IMAGE_TAG" "$FRONTEND_IMAGE:$IMAGE_TAG"; do
+            name="$(basename "${image%%:*}")"
+            # Reporte: vulnerabilidades HIGH y CRITICAL que tienen solución
+            trivy image --severity HIGH,CRITICAL --ignore-unfixed \
+              --output "/reports/trivy-$name.txt" "$image"
+            cat "security-reports/trivy-$name.txt"
+            # Gate: el pipeline falla si hay vulnerabilidades CRITICAL corregibles
+            trivy image --severity CRITICAL --ignore-unfixed --exit-code 1 --quiet "$image"
+          done
+
+      - name: Start containers (frontend + backend)
+        run: docker compose up --detach --no-build --wait --wait-timeout 60
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: acceptance/requirements.txt
+
+      - name: Install acceptance test dependencies
+        run: pip install -r acceptance/requirements.txt
+
+      - name: Run Acceptance Tests (Selenium)
+        env:
+          APP_BASE_URL: http://localhost:8080
+        run: pytest acceptance --html=acceptance-report.html --self-contained-html
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs || true
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
+
+      # Se guardan las MISMAS imágenes probadas para que el job "release" las
+      # publique sin volver a construirlas.
+      - name: Save tested images
+        if: github.event_name == 'push'
+        run: docker save "$BACKEND_IMAGE:$IMAGE_TAG" "$FRONTEND_IMAGE:$IMAGE_TAG" | gzip > passforge-images.tar.gz
+
+      - name: Upload tested images
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-images
+          path: passforge-images.tar.gz
+          retention-days: 1
+          compression-level: 0 # ya está comprimido con gzip
+
+      - name: Upload acceptance and security reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-reports
+          if-no-files-found: ignore
+          path: |
+            acceptance-report.html
+            acceptance/screenshots/
+            security-reports/
+
+  # ------------------------------------------------------------------------- #
+  # 5. Release: publica en Docker Hub las imágenes que pasaron TODO
+  # ------------------------------------------------------------------------- #
+  release:
+    needs: [sonarcloud, build-and-acceptance]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download tested images
+        uses: actions/download-artifact@v8
+        with:
+          name: docker-images
+
+      - name: Load tested images
+        run: gunzip -c passforge-images.tar.gz | docker load
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker images
+        run: |
+          tags="$IMAGE_TAG"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            tags="$tags latest"
+          fi
+          case "$GITHUB_REF" in
+            refs/tags/v*) tags="$tags ${GITHUB_REF_NAME#v}" ;;
+          esac
+
+          echo "## Imágenes publicadas" >> "$GITHUB_STEP_SUMMARY"
+          for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE"; do
+            for tag in $tags; do
+              docker tag "$image:$IMAGE_TAG" "$image:$tag"
+              docker push "$image:$tag"
+              echo "- \`$image:$tag\`" >> "$GITHUB_STEP_SUMMARY"
+            done
+          done

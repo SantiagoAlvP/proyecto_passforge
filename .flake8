@@ -1,0 +1,6 @@
+[flake8]
+# Compatible con Black: líneas de hasta 88 caracteres y sin las reglas que
+# contradicen su formato (E203, E701).
+max-line-length = 88
+extend-ignore = E203,E701
+exclude = .git,__pycache__,.venv,venv,htmlcov

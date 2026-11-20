@@ -119,7 +119,9 @@ class TestGeneratePassword:
         # Arrange: choice() devuelve siempre el primer carácter y
         # shuffle() no mezcla nada.
         monkeypatch.setattr(password_service.secrets, "choice", lambda chars: chars[0])
-        monkeypatch.setattr(password_service._SECURE_RANDOM, "shuffle", lambda items: None)
+        monkeypatch.setattr(
+            password_service._SECURE_RANDOM, "shuffle", lambda items: None
+        )
         options = PasswordOptions(length=8)
 
         # Act
@@ -132,7 +134,9 @@ class TestGeneratePassword:
         # Arrange: un "espía" que registra las llamadas a shuffle()
         calls = []
         monkeypatch.setattr(
-            password_service._SECURE_RANDOM, "shuffle", lambda items: calls.append(items)
+            password_service._SECURE_RANDOM,
+            "shuffle",
+            lambda items: calls.append(items),
         )
 
         # Act
@@ -325,7 +329,10 @@ class TestEvaluateStrength:
 
         # Assert
         assert repeated.score == good.score - 1
-        assert "Evita repetir el mismo carácter varias veces seguidas." in repeated.feedback
+        assert (
+            "Evita repetir el mismo carácter varias veces seguidas."
+            in repeated.feedback
+        )
 
     def test_sequences_lower_the_score(self):
         good = evaluate_strength("Kp9#Wm2$Lq7!")
@@ -333,7 +340,9 @@ class TestEvaluateStrength:
         with_sequence = evaluate_strength("Kp9#Wm2$abc!")
 
         assert with_sequence.score == good.score - 1
-        assert "Evita secuencias predecibles como 'abc' o '123'." in with_sequence.feedback
+        assert (
+            "Evita secuencias predecibles como 'abc' o '123'." in with_sequence.feedback
+        )
 
     def test_score_never_goes_below_zero(self):
         # Arrange: ya es "muy débil" y además tiene repetición y secuencia
@@ -358,7 +367,9 @@ class TestStrengthOfGenerated:
     def test_excluding_ambiguous_characters_reduces_entropy(self):
         normal = strength_of_generated(PasswordOptions())
 
-        without_ambiguous = strength_of_generated(PasswordOptions(exclude_ambiguous=True))
+        without_ambiguous = strength_of_generated(
+            PasswordOptions(exclude_ambiguous=True)
+        )
 
         assert without_ambiguous.entropy_bits < normal.entropy_bits
 
@@ -366,7 +377,9 @@ class TestStrengthOfGenerated:
 class TestStrengthResult:
     def test_to_dict_returns_all_fields(self):
         # Arrange
-        result = StrengthResult(score=2, label="aceptable", entropy_bits=40.5, feedback=["x"])
+        result = StrengthResult(
+            score=2, label="aceptable", entropy_bits=40.5, feedback=["x"]
+        )
 
         # Act
         data = result.to_dict()

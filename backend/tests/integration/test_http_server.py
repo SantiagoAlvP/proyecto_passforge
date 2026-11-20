@@ -27,7 +27,9 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 @pytest.fixture
 def base_url():
     """Levanta la app en un servidor real y lo apaga al terminar la prueba."""
-    server = make_server("127.0.0.1", 0, create_app("testing"), threaded=True)  # 0 = puerto libre
+    server = make_server(
+        "127.0.0.1", 0, create_app("testing"), threaded=True
+    )  # 0 = puerto libre
     # poll_interval corto para que el servidor se apague rápido al terminar.
     thread = threading.Thread(
         target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
@@ -65,8 +67,14 @@ class TestRealHttpServer:
 
     def test_generate_and_check_over_the_network(self, base_url):
         # Act
-        status, _, generated = http("POST", f"{base_url}/passwords/generate", {"length": 24})
-        _, _, checked = http("POST", f"{base_url}/passwords/strength", {"password": generated["password"]})
+        status, _, generated = http(
+            "POST", f"{base_url}/passwords/generate", {"length": 24}
+        )
+        _, _, checked = http(
+            "POST",
+            f"{base_url}/passwords/strength",
+            {"password": generated["password"]},
+        )
 
         # Assert
         assert status == 200
@@ -80,7 +88,9 @@ class TestRealHttpServer:
         assert body["error"]["code"] == "validation_error"
 
     def test_security_and_cors_headers_over_the_network(self, base_url):
-        _, headers, _ = http("GET", f"{base_url}/health", headers={"Origin": "http://127.0.0.1:5500"})
+        _, headers, _ = http(
+            "GET", f"{base_url}/health", headers={"Origin": "http://127.0.0.1:5500"}
+        )
 
         assert headers["X-Content-Type-Options"] == "nosniff"
         assert headers["Cache-Control"] == "no-store"

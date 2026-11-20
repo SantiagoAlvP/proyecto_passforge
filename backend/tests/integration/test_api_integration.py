@@ -29,7 +29,9 @@ class TestCompleteFlows:
         max_length = policy["length"]["max"]
 
         # Act: genera con la longitud máxima y luego comprueba esa contraseña
-        generated = client.post(f"{API}/passwords/generate", json={"length": max_length})
+        generated = client.post(
+            f"{API}/passwords/generate", json={"length": max_length}
+        )
         password = generated.get_json()["password"]
         checked = client.post(f"{API}/passwords/strength", json={"password": password})
 
@@ -63,7 +65,9 @@ class TestCompleteFlows:
         }
 
         # Act
-        password = client.post(f"{API}/passwords/generate", json=payload).get_json()["password"]
+        password = client.post(f"{API}/passwords/generate", json=payload).get_json()[
+            "password"
+        ]
 
         # Assert
         allowed = set(string.ascii_lowercase + string.digits) - set("Il1O0o")
@@ -82,9 +86,21 @@ class TestErrorsThroughTheWholeStack:
         [
             ({"json": {"length": 4}}, 400, "validation_error"),
             ({"json": ["no", "es", "objeto"]}, 400, "validation_error"),
-            ({"data": "{malformado", "content_type": "application/json"}, 400, "validation_error"),
-            ({"data": "length=16", "content_type": "text/plain"}, 415, "unsupported_media_type"),
-            ({"data": "x" * 5000, "content_type": "application/json"}, 413, "request_entity_too_large"),
+            (
+                {"data": "{malformado", "content_type": "application/json"},
+                400,
+                "validation_error",
+            ),
+            (
+                {"data": "length=16", "content_type": "text/plain"},
+                415,
+                "unsupported_media_type",
+            ),
+            (
+                {"data": "x" * 5000, "content_type": "application/json"},
+                413,
+                "request_entity_too_large",
+            ),
         ],
         ids=["invalid-length", "not-an-object", "broken-json", "not-json", "too-large"],
     )
@@ -121,7 +137,9 @@ class TestCorsIntegration:
         assert response.status_code == 200
         assert response.headers["Access-Control-Allow-Origin"] == FRONTEND_ORIGIN
         assert "POST" in response.headers["Access-Control-Allow-Methods"]
-        assert "content-type" in response.headers["Access-Control-Allow-Headers"].lower()
+        assert (
+            "content-type" in response.headers["Access-Control-Allow-Headers"].lower()
+        )
 
     def test_preflight_from_another_site_is_not_authorized(self, client):
         response = client.options(
@@ -175,9 +193,15 @@ class TestRateLimitIntegration:
 
         # Act
         for i in range(30):
-            client.post(self.STRENGTH, json=self.PAYLOAD, headers={"X-Forwarded-For": f"203.0.113.{i}"})
+            client.post(
+                self.STRENGTH,
+                json=self.PAYLOAD,
+                headers={"X-Forwarded-For": f"203.0.113.{i}"},
+            )
         response = client.post(
-            self.STRENGTH, json=self.PAYLOAD, headers={"X-Forwarded-For": "198.51.100.7"}
+            self.STRENGTH,
+            json=self.PAYLOAD,
+            headers={"X-Forwarded-For": "198.51.100.7"},
         )
 
         # Assert
@@ -194,16 +218,26 @@ class TestRateLimitIntegration:
             client.post(self.STRENGTH, json=self.PAYLOAD, headers=client_a)
 
         # Assert
-        assert client.post(self.STRENGTH, json=self.PAYLOAD, headers=client_a).status_code == 429
-        assert client.post(self.STRENGTH, json=self.PAYLOAD, headers=client_b).status_code == 200
+        assert (
+            client.post(self.STRENGTH, json=self.PAYLOAD, headers=client_a).status_code
+            == 429
+        )
+        assert (
+            client.post(self.STRENGTH, json=self.PAYLOAD, headers=client_b).status_code
+            == 200
+        )
 
 
 class TestSecurityIntegration:
     def test_passwords_never_appear_in_the_logs(self, client, caplog):
         # Act
         with caplog.at_level(logging.DEBUG):
-            generated = client.post(f"{API}/passwords/generate", json={}).get_json()["password"]
-            client.post(f"{API}/passwords/strength", json={"password": "MiSecreto#2026"})
+            generated = client.post(f"{API}/passwords/generate", json={}).get_json()[
+                "password"
+            ]
+            client.post(
+                f"{API}/passwords/strength", json={"password": "MiSecreto#2026"}
+            )
 
         # Assert
         assert generated not in caplog.text
@@ -215,13 +249,18 @@ class TestSecurityIntegration:
         client = app.test_client()
 
         # Act
-        allowed = client.get(f"{API}/health", headers={"Origin": "https://passforge.example"})
+        allowed = client.get(
+            f"{API}/health", headers={"Origin": "https://passforge.example"}
+        )
         dev_origin = client.get(f"{API}/health", headers={"Origin": FRONTEND_ORIGIN})
 
         # Assert
         assert app.debug is False
         assert allowed.headers["Strict-Transport-Security"].startswith("max-age=")
-        assert allowed.headers["Access-Control-Allow-Origin"] == "https://passforge.example"
+        assert (
+            allowed.headers["Access-Control-Allow-Origin"]
+            == "https://passforge.example"
+        )
         assert "Access-Control-Allow-Origin" not in dev_origin.headers
 
     def test_production_app_refuses_to_start_without_cors_origins(self, make_app):

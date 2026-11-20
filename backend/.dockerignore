@@ -1,0 +1,21 @@
+# Archivos que NO se envían a Docker al construir la imagen.
+# La imagen solo necesita requirements.txt, app/ y wsgi.py.
+.env
+.env.*
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov
+coverage.xml
+report.html
+tests
+README.md
+pyproject.toml
+requirements-dev.txt
+Dockerfile
+.dockerignore

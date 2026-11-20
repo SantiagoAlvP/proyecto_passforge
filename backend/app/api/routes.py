@@ -46,12 +46,14 @@ def health() -> Response:
 
 @api_bp.get("/passwords/options")
 def password_options() -> Response:
+    """Devuelve la política: longitudes y conjuntos de caracteres admitidos."""
     return jsonify(password_service.get_password_policy())
 
 
 @api_bp.post("/passwords/generate")
 @limiter.limit(_WRITE_RATE_LIMIT)
 def generate_password() -> Response:
+    """Genera una contraseña aleatoria con las opciones recibidas."""
     options = parse_generate_payload(_get_json_object())
     password = password_service.generate_password(options)
     strength = password_service.strength_of_generated(options)
@@ -65,6 +67,7 @@ def generate_password() -> Response:
 @api_bp.post("/passwords/strength")
 @limiter.limit(_WRITE_RATE_LIMIT)
 def password_strength() -> Response:
+    """Evalúa la fortaleza de la contraseña recibida."""
     password = parse_strength_payload(_get_json_object())
     result = password_service.evaluate_strength(password)
     return jsonify(result.to_dict())

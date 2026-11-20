@@ -27,7 +27,12 @@ from app.services.password_service import (
 
 pytestmark = pytest.mark.module
 
-CHARSET_FIELDS = ("include_lowercase", "include_uppercase", "include_digits", "include_symbols")
+CHARSET_FIELDS = (
+    "include_lowercase",
+    "include_uppercase",
+    "include_digits",
+    "include_symbols",
+)
 # Las 15 combinaciones posibles de conjuntos de caracteres (1, 2, 3 o 4 a la vez).
 ALL_CHARSET_COMBINATIONS = [
     combo for size in range(1, 5) for combo in combinations(CHARSET_FIELDS, size)
@@ -36,7 +41,9 @@ ALL_CHARSET_COMBINATIONS = [
 
 def options_with(charsets, **kwargs):
     """Crea PasswordOptions activando solo los conjuntos indicados."""
-    return PasswordOptions(**{name: name in charsets for name in CHARSET_FIELDS}, **kwargs)
+    return PasswordOptions(
+        **{name: name in charsets for name in CHARSET_FIELDS}, **kwargs
+    )
 
 
 class TestPolicyIsConsistentWithTheModule:
@@ -74,7 +81,9 @@ class TestPolicyIsConsistentWithTheModule:
         ambiguous = get_password_policy()["exclude_ambiguous"]["characters"]
 
         # Act
-        password = generate_password(PasswordOptions(length=128, exclude_ambiguous=True))
+        password = generate_password(
+            PasswordOptions(length=128, exclude_ambiguous=True)
+        )
 
         # Assert
         assert set(password).isdisjoint(ambiguous)
@@ -82,7 +91,13 @@ class TestPolicyIsConsistentWithTheModule:
     def test_every_label_returned_by_the_module_is_published(self):
         # Arrange
         labels = get_password_policy()["strength_labels"]
-        samples = ["123456", "Kp9#W", "Kp9#Wm", "Kp9#Wm2$Lq7!", "T7#qL!m9$zR2@vX8yW4%nB6&"]
+        samples = [
+            "123456",
+            "Kp9#W",
+            "Kp9#Wm",
+            "Kp9#Wm2$Lq7!",
+            "T7#qL!m9$zR2@vX8yW4%nB6&",
+        ]
 
         # Act
         results = [evaluate_strength(sample) for sample in samples]
@@ -101,7 +116,9 @@ class TestGenerationAndEvaluationWorkTogether:
     def test_every_combination_uses_all_and_only_the_selected_sets(self, charsets):
         # Arrange
         options = options_with(charsets, length=12)
-        selected_sets = dict(zip(CHARSET_FIELDS, build_character_sets(PasswordOptions())))
+        selected_sets = dict(
+            zip(CHARSET_FIELDS, build_character_sets(PasswordOptions()))
+        )
 
         # Act
         password = generate_password(options)
@@ -122,7 +139,10 @@ class TestGenerationAndEvaluationWorkTogether:
         # Assert
         for result in results:
             assert "Usa al menos 12 caracteres." not in result.feedback
-            assert "Combina mayúsculas, minúsculas, números y símbolos." not in result.feedback
+            assert (
+                "Combina mayúsculas, minúsculas, números y símbolos."
+                not in result.feedback
+            )
 
     @pytest.mark.parametrize("exclude_ambiguous", [False, True])
     def test_reported_strength_matches_the_real_alphabet(self, exclude_ambiguous):

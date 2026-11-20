@@ -1,0 +1,5 @@
+# Archivos que NO se envían a Docker al construir la imagen.
+README.md
+Dockerfile
+.dockerignore
+.DS_Store

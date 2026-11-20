@@ -71,7 +71,9 @@ COMMON_PASSWORDS = frozenset(
 )
 
 _SECURE_RANDOM = secrets.SystemRandom()
-_FULL_POOL_SIZE = len(LOWERCASE) + len(UPPERCASE) + len(DIGITS) + len(string.punctuation)
+_FULL_POOL_SIZE = (
+    len(LOWERCASE) + len(UPPERCASE) + len(DIGITS) + len(string.punctuation)
+)
 _REPEATED_CHARS_PATTERN = re.compile(r"(.)\1\1")
 
 
@@ -119,6 +121,7 @@ class StrengthResult:
     feedback: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        """Convierte el resultado en un diccionario listo para JSON."""
         return asdict(self)
 
 

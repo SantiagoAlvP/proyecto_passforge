@@ -1,0 +1,38 @@
+# PassForge completa (frontend + backend), cada componente en su contenedor.
+#
+#   Local:  docker compose up --build     ->  http://localhost:8080
+#   CI:     el pipeline construye las imágenes y las levanta con
+#           "docker compose up --no-build", usando BACKEND_IMAGE,
+#           FRONTEND_IMAGE e IMAGE_TAG (el SHA del commit).
+name: passforge
+
+services:
+  backend:
+    build: ./backend
+    image: ${BACKEND_IMAGE:-passforge-backend}:${IMAGE_TAG:-local}
+    environment:
+      APP_ENV: production
+      # Orígenes desde los que el navegador abre el frontend.
+      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+    ports:
+      - "8000:8000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  frontend:
+    build: ./frontend
+    image: ${FRONTEND_IMAGE:-passforge-frontend}:${IMAGE_TAG:-local}
+    environment:
+      # El navegador llama al backend por el puerto publicado en el host.
+      API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

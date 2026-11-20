@@ -40,6 +40,7 @@ class ValidationError(Exception):
 def error_response(
     status: int, code: str, message: str, details: dict[str, Any] | None = None
 ) -> tuple[Response, int]:
+    """Construye una respuesta de error con el formato JSON común."""
     body: dict[str, Any] = {"code": code, "message": message}
     if details:
         body["details"] = details
@@ -47,6 +48,8 @@ def error_response(
 
 
 def register_error_handlers(app: Flask) -> None:
+    """Registra en ``app`` los manejadores que devuelven errores en JSON."""
+
     @app.errorhandler(ValidationError)
     def handle_validation_error(error: ValidationError) -> tuple[Response, int]:
         return error_response(400, "validation_error", error.message, error.details)

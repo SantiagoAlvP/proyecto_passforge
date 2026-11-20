@@ -19,6 +19,15 @@ htmlcov/
 coverage.xml
 test-results/
 playwright-report/
+report.html
+acceptance-report.html
+acceptance/screenshots/
+
+# --- Reportes del pipeline (linters y seguridad) ---
+pylint-report.txt
+flake8-report.txt
+security-reports/
+passforge-images.tar.gz
 
 # --- Node (por si se usa en el futuro) ---
 node_modules/

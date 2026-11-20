@@ -17,6 +17,20 @@ Abre <http://127.0.0.1:5500>.
 > Se necesita un servidor HTTP: los módulos de JavaScript (`type="module"`)
 > no funcionan abriendo el archivo directamente (`file://`).
 
+## Con Docker
+
+La imagen usa **nginx sin privilegios** (puerto 8080). Al arrancar, el script
+`docker/40-passforge-config.sh` genera `js/config.js` con el valor de la
+variable `API_BASE_URL` (por defecto `/api/v1`), así la misma imagen funciona
+en cualquier ambiente:
+
+```bash
+docker build -t passforge-frontend .
+docker run -p 8080:8080 -e API_BASE_URL=http://localhost:8000/api/v1 passforge-frontend
+```
+
+Para levantar la app completa usa `docker compose up --build` desde la raíz.
+
 ## Estructura
 
 ```
@@ -27,7 +41,12 @@ frontend/
 │   ├── config.js     # URL del backend (único lugar a cambiar)
 │   ├── api.js        # cliente HTTP: todas las llamadas al API
 │   └── app.js        # lógica de la interfaz
-└── assets/favicon.svg
+├── assets/favicon.svg
+├── docker/
+│   ├── nginx.conf              # servidor y health check /health
+│   ├── security-headers.conf   # cabeceras de seguridad
+│   └── 40-passforge-config.sh  # genera config.js al arrancar
+└── Dockerfile
 ```
 
 ## Buenas prácticas aplicadas

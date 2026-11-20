@@ -3,7 +3,7 @@
 Desarrollo:
     python wsgi.py
 
-Producción (más adelante, dentro de Docker):
+Producción (dentro del contenedor Docker):
     gunicorn --bind 0.0.0.0:8000 wsgi:app
 """
 
@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 # Carga variables desde .env (si existe) sin sobrescribir las ya definidas.
 load_dotenv()
 
-from app import create_app  # noqa: E402  (debe ir después de load_dotenv)
+# Debe importarse después de load_dotenv() para leer las variables del .env.
+from app import create_app  # noqa: E402  # pylint: disable=wrong-import-position
 
 app = create_app()
 
