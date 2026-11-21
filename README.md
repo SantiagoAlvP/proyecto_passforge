@@ -90,7 +90,7 @@ El código está en [`infra/`](infra/), dividido en dos *root modules*:
 
 | Carpeta | Se aplica | Recursos |
 |---|---|---|
-| `infra/ecr/` | Una sola vez | 2 repositorios ECR: tags inmutables, escaneo de vulnerabilidades al subir, retención de las últimas 10 imágenes |
+| `infra/ecr/` | Una sola vez | 2 repositorios ECR: tags inmutables y retención de las últimas 10 imágenes |
 | `infra/app/` | Una vez por ambiente (workspaces `staging` y `production`) | ALB, listener + regla `/api/*`, 2 target groups, 2 security groups, cluster ECS, 2 task definitions, 2 servicios Fargate, log group |
 
 | Recurso (ej. staging) | Detalle |
@@ -123,7 +123,10 @@ para que el pipeline y los desarrolladores compartan el mismo estado sin pisarse
 - Los contenedores **solo aceptan tráfico desde el ALB** (security group); no son accesibles directamente desde Internet.
 - Los contenedores corren con **usuarios sin privilegios** (no root).
 - El backend corre en modo `production`: sin debug, CORS restringido al dominio del ALB y `TRUST_PROXY` activo para que el rate limit use la IP real del cliente.
-- **Escaneo de vulnerabilidades** de las imágenes con Trivy en el CI y al subirlas a ECR.
+- **Escaneo de vulnerabilidades** de las imágenes con Trivy en el CI: bloquea las
+  vulnerabilidades `CRITICAL` antes de publicar. (ECR tiene `scan_on_push`
+  activo, pero su escaneo básico no analiza las imágenes en formato *OCI image
+  index* que genera Docker, así que la verificación real es la de Trivy.)
 - Las imágenes no incluyen `.env`, pruebas ni archivos de desarrollo (`.dockerignore`).
 - Las credenciales de AWS viven solo en GitHub Secrets, nunca en el código.
 
