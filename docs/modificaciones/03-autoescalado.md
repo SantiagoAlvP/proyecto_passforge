@@ -61,7 +61,7 @@ flowchart LR
    el perfil `stress` (sube hasta 100 usuarios virtuales durante 6 minutos).
 3. En 2 o 3 minutos, ver en la pestaña **Events** del servicio el mensaje
    `has started 1 tasks` y en **Tasks** las tareas nuevas; en
-   **EC2 → Target Groups → passforge-staging-backend** aparecen más targets
+   **EC2 → Target Groups → passforge-staging-be-tg** aparecen más targets
    `healthy`.
 4. En **CloudWatch → Alarms** se ven las alarmas `TargetTracking-…` que crea
    Application Auto Scaling (AlarmHigh / AlarmLow).
