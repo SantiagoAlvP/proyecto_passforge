@@ -1,8 +1,9 @@
 # .github/workflows/cd.yml
 # Pipeline de Entrega Continua (CD) de PassForge.
 #
-#   IaC (validar + ECR) -> Artefacto en ECR -> Deploy staging -> Pruebas pre-prod
-#     -> [aprobación manual] -> Deploy production -> Pruebas post-prod (smoke)
+#   IaC (validar + ECR) -> Artefacto (Docker Hub -> ECR) -> Deploy staging
+#     -> Pruebas pre-prod -> [aprobación manual] -> Deploy production
+#     -> Pruebas post-prod (smoke)
 #   Si un deploy o sus pruebas fallan -> rollback automático a la imagen anterior.
 #   Rollback manual (botón de pánico): ver rollback.yml
 name: CD
@@ -10,15 +11,9 @@ name: CD
 on:
   # Se ejecuta cuando el CI termina en main (lo filtra el "if" del primer job)
   workflow_run:
-    workflows: ["CI"]  # Debe coincidir con el "name:" del workflow de CI
+    workflows: ["CI Pipeline"]  # Debe coincidir con el "name:" de ci.yml
     types: [completed]
     branches: [main]
-  # TEMPORAL: permite probar el CD desde la rama mientras se integra con el CI
-  push:
-    branches: [feature/cd]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   workflow_dispatch:
     inputs:
       simulate_failure:
@@ -38,7 +33,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   TF_VERSION: '1.15.8'
-  # Commit que se despliega: el que probó el CI (workflow_run) o el del push
+  # Commit que se despliega: el que probó el CI (workflow_run) o el actual (manual)
   SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
   # Falla simulada: por el botón manual o con "[simular-falla]" en el commit
   SIMULATE_FAILURE: ${{ inputs.simulate_failure == true || contains(github.event.head_commit.message, '[simular-falla]') || contains(github.event.workflow_run.head_commit.message, '[simular-falla]') }}
@@ -49,8 +44,12 @@ jobs:
   # ---------------------------------------------------------------------------
   iac-shared:
     name: IaC · validar y aplicar ECR
-    # Si viene del CI, solo continúa cuando el CI terminó con éxito
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Si viene del CI, solo continúa cuando el CI de un push a main terminó con
+    # éxito: es el único caso en el que el job "release" publicó las imágenes.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     outputs:
       backend_repo: ${{ steps.ecr.outputs.backend_repo }}
@@ -101,10 +100,11 @@ jobs:
           echo "frontend_repo=$(terraform output -raw frontend_repository_url)" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # 2. Artefacto: confirmar que las imágenes del commit están en ECR
+  # 2. Artefacto: promover a ECR las imágenes que el CI probó y publicó en
+  #    Docker Hub (build once, deploy many: aquí no se construye nada)
   # ---------------------------------------------------------------------------
   release-images:
-    name: Artefacto · imágenes en ECR
+    name: Artefacto · Docker Hub → ECR
     needs: iac-shared
     runs-on: ubuntu-latest
     outputs:
@@ -113,12 +113,21 @@ jobs:
     env:
       BACKEND_REPO: ${{ needs.iac-shared.outputs.backend_repo }}
       FRONTEND_REPO: ${{ needs.iac-shared.outputs.frontend_repo }}
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Check Docker Hub configuration
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ]; then
+            echo "::error::Falta la variable DOCKERHUB_USERNAME (Settings → Secrets and variables → Actions → Variables)"
+            exit 1
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
         with:
-          ref: ${{ env.SHA }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -132,22 +141,30 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # El CI publica las imágenes (paso Release). Si no están (p. ej. al probar
-      # desde feature/cd), se construyen aquí una sola vez con el mismo tag.
-      - name: Ensure images exist for this commit
+      # Copia a ECR exactamente la imagen que el CI probó (tag = SHA del commit).
+      # Los tags de ECR son inmutables: si ya existe (p. ej. al repetir el CD),
+      # no se vuelve a subir.
+      - name: Promote images from Docker Hub to ECR
         id: images
         run: |
+          echo "## Imágenes promovidas a ECR" >> "$GITHUB_STEP_SUMMARY"
           for component in backend frontend; do
+            source_image="${DOCKERHUB_USERNAME}/passforge-${component}:${SHA}"
+            repo_var="$(echo "${component}" | tr '[:lower:]' '[:upper:]')_REPO"
+            target_image="${!repo_var}:${SHA}"
+
             if aws ecr describe-images --repository-name "passforge-${component}" \
                  --image-ids imageTag="$SHA" > /dev/null 2>&1; then
-              echo "passforge-${component}:${SHA} ya existe en ECR (publicada por el CI)"
+              echo "${target_image} ya existe en ECR"
             else
-              echo "passforge-${component}:${SHA} no existe: se construye y publica"
-              repo_var="$(echo "${component}" | tr '[:lower:]' '[:upper:]')_REPO"
-              repo="${!repo_var}"
-              docker build -t "${repo}:${SHA}" "./${component}"
-              docker push "${repo}:${SHA}"
+              if ! docker pull "$source_image"; then
+                echo "::error::No existe ${source_image} en Docker Hub. ¿El job release del CI publicó este commit?"
+                exit 1
+              fi
+              docker tag "$source_image" "$target_image"
+              docker push "$target_image"
             fi
+            echo "- \`${source_image}\` → \`${target_image}\`" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "backend_image=${BACKEND_REPO}:${SHA}" >> "$GITHUB_OUTPUT"
           echo "frontend_image=${FRONTEND_REPO}:${SHA}" >> "$GITHUB_OUTPUT"
@@ -201,7 +218,9 @@ jobs:
           ref: ${{ env.SHA }}
 
       - name: Run pre-prod tests against Staging
-        run: python3 scripts/smoke_test.py "${{ needs.deploy-staging.outputs.alb_url }}" --level preprod
+        run: |
+          python3 scripts/smoke_test.py "${{ needs.deploy-staging.outputs.alb_url }}" \
+            --level preprod --expected-version "$SHA"
 
   # ---------------------------------------------------------------------------
   # 4b. Rollback automático de staging si el deploy o las pruebas fallan
@@ -299,7 +318,8 @@ jobs:
             echo "::warning::Falla simulada activada: se probará el rollback automático"
             extra="--simulate-failure"
           fi
-          python3 scripts/smoke_test.py "${{ needs.deploy-production.outputs.alb_url }}" --level postprod $extra
+          python3 scripts/smoke_test.py "${{ needs.deploy-production.outputs.alb_url }}" \
+            --level postprod --expected-version "$SHA" $extra
 
   # ---------------------------------------------------------------------------
   # 6b. Rollback automático de production si el deploy o los smoke tests fallan

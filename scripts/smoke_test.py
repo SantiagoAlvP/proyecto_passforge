@@ -14,11 +14,17 @@ Uso:
     python scripts/smoke_test.py http://<alb> --level preprod
     python scripts/smoke_test.py http://<alb> --level postprod
     python scripts/smoke_test.py http://<alb> --level postprod --simulate-failure
+    python scripts/smoke_test.py http://<alb> --level preprod --expected-version <sha>
+
+Con --expected-version, primero se espera a que /api/v1/health informe esa
+versión (APP_VERSION) y se agrega una prueba que lo confirma: así las pruebas
+nunca validan, por error, la versión que estaba desplegada antes.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import sys
 import time
@@ -81,6 +87,16 @@ def check_api_health(base_url: str) -> None:
     status, _, payload = get_json(base_url, "/api/v1/health")
     expect(status == 200, f"health respondió {status}")
     expect(payload.get("status") == "ok", f"health devolvió {payload}")
+
+
+def check_deployed_version(base_url: str, expected_version: str) -> None:
+    status, _, payload = get_json(base_url, "/api/v1/health")
+    expect(status == 200, f"health respondió {status}")
+    deployed = payload.get("version")
+    expect(
+        deployed == expected_version,
+        f"versión desplegada {deployed!r}, se esperaba {expected_version!r}",
+    )
 
 
 def check_generate_default(base_url: str) -> None:
@@ -167,13 +183,18 @@ PREPROD_CHECKS: list[tuple[str, Callable[[str], None]]] = POSTPROD_CHECKS + [
 ]
 
 
-def wait_until_healthy(base_url: str) -> None:
-    """Espera a que el ALB responda (justo después de desplegar puede tardar)."""
+def wait_until_healthy(base_url: str, expected_version: str | None = None) -> None:
+    """Espera a que el ALB responda (justo después de desplegar puede tardar).
+
+    Si se indica expected_version, espera además a que el backend la informe.
+    """
     deadline = time.monotonic() + WAIT_FOR_HEALTHY_SECONDS
     while True:
         try:
             check_api_health(base_url)
             check_frontend_loads(base_url)
+            if expected_version:
+                check_deployed_version(base_url, expected_version)
             return
         except (CheckFailed, OSError) as exc:
             if time.monotonic() > deadline:
@@ -191,15 +212,33 @@ def main() -> int:
         action="store_true",
         help="Agrega una prueba que falla (para demostrar el rollback)",
     )
+    parser.add_argument(
+        "--expected-version",
+        help="Versión (SHA) que debe informar /api/v1/health",
+    )
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
 
     checks = list(PREPROD_CHECKS if args.level == "preprod" else POSTPROD_CHECKS)
+    if args.expected_version:
+        checks.insert(
+            2,
+            (
+                f"Versión desplegada = {args.expected_version[:7]}",
+                functools.partial(
+                    check_deployed_version, expected_version=args.expected_version
+                ),
+            ),
+        )
     if args.simulate_failure:
         checks.append(("Falla simulada", check_simulated_failure))
 
     print(f"Pruebas {args.level} contra {base_url}")
-    wait_until_healthy(base_url)
+    try:
+        wait_until_healthy(base_url, args.expected_version)
+    except CheckFailed as exc:
+        print(f"  [FALLA] {exc}")
+        return 1
 
     failures = 0
     for name, check in checks:

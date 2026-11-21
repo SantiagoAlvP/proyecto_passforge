@@ -163,7 +163,7 @@ resource "aws_lb_target_group" "frontend" {
   deregistration_delay = 30
 
   health_check {
-    path                = "/"
+    path                = "/health"
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30

@@ -173,8 +173,8 @@ Abre <http://127.0.0.1:5500>.
 | Modulares | `backend/tests/module/` | Cada módulo completo, independiente del resto | `pytest -m module` |
 | Integración | `backend/tests/integration/` | La API completa con todas sus capas | `pytest -m integration` |
 | Aceptación | `acceptance/` | Flujos de usuario en un navegador real (Selenium) contra los contenedores | `pytest acceptance` |
-| Pre-prod | `scripts/smoke_test.py` | 10 pruebas contra staging en AWS (frontend, ALB, API, validación, seguridad) | `python scripts/smoke_test.py <url> --level preprod` |
-| Post-prod | `scripts/smoke_test.py` | 3 pruebas de humo contra producción | `python scripts/smoke_test.py <url> --level postprod` |
+| Pre-prod | `scripts/smoke_test.py` | 11 pruebas contra staging en AWS (frontend, ALB, API, validación, seguridad y versión desplegada) | `python scripts/smoke_test.py <url> --level preprod --expected-version <sha>` |
+| Post-prod | `scripts/smoke_test.py` | 4 pruebas de humo contra producción (incluida la versión desplegada) | `python scripts/smoke_test.py <url> --level postprod --expected-version <sha>` |
 
 Cobertura (mínimo 80 %, actual 100 % de líneas y ramas):
 
@@ -233,9 +233,9 @@ reutilizable [`.github/actions/terraform-deploy`](.github/actions/terraform-depl
 | `iac-shared` | IaC | `terraform fmt` y `validate` de toda la infraestructura; aplica los repositorios ECR compartidos |
 | `release-images` | Artefacto | **Promueve** las imágenes que el CI probó y publicó en Docker Hub (tag = SHA) a ECR, sin reconstruirlas |
 | `deploy-staging` | Deploy | `terraform apply` del workspace `staging` con las imágenes del commit; guarda las imágenes anteriores para el rollback |
-| `test-staging` | Pruebas pre-prod | 10 pruebas contra el ALB de staging; antes espera a que `/api/v1/health` informe la versión nueva |
+| `test-staging` | Pruebas pre-prod | 11 pruebas contra el ALB de staging; antes espera a que `/api/v1/health` informe la versión nueva (el SHA del commit) |
 | `deploy-production` | Deploy | Requiere **aprobación manual** (environment `production`); despliega la misma imagen probada en staging |
-| `test-production` | Pruebas post-prod | 3 pruebas de humo contra producción, también verificando la versión |
+| `test-production` | Pruebas post-prod | 4 pruebas de humo contra producción, incluida la versión desplegada |
 | `rollback-staging` / `rollback-production` | Rollback | Si el despliegue o sus pruebas fallan, vuelve automáticamente a las imágenes anteriores |
 
 **Rollback manual (botón de pánico):** *Actions → Rollback manual → Run
