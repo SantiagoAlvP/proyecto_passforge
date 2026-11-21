@@ -59,6 +59,9 @@ class BaseConfig:
         # para que el rate limit use la IP real del cliente.
         self.TRUST_PROXY = _parse_bool(os.getenv("TRUST_PROXY"))
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", self.LOG_LEVEL).upper()
+        # Versión desplegada: en el pipeline de CD es el SHA del commit. Se
+        # expone en /api/v1/health para verificar qué versión está corriendo.
+        self.APP_VERSION = os.getenv("APP_VERSION", "local")
 
     def validate(self) -> None:
         """Comprueba la configuración. Las subclases pueden ser más estrictas."""

@@ -62,7 +62,7 @@ class TestRealHttpServer:
 
         # Assert
         assert status == 200
-        assert body == {"status": "ok"}
+        assert body == {"status": "ok", "version": "local"}
         assert headers["Content-Type"] == "application/json"
 
     def test_generate_and_check_over_the_network(self, base_url):

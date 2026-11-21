@@ -263,6 +263,28 @@ class TestSecurityIntegration:
         )
         assert "Access-Control-Allow-Origin" not in dev_origin.headers
 
+    def test_production_app_reports_the_deployed_version(self, make_app):
+        """Contrato con el CD: /health devuelve la versión (SHA) desplegada."""
+        # Arrange: así configura el CD la tarea en AWS
+        app = make_app(
+            "production",
+            env={
+                "CORS_ORIGINS": "http://passforge-staging.example",
+                "TRUST_PROXY": "true",
+                "APP_VERSION": "a3095f23f2e08669f0774b9137c2a3bef9b31ca6",
+            },
+        )
+
+        # Act
+        response = app.test_client().get(f"{API}/health")
+
+        # Assert
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "status": "ok",
+            "version": "a3095f23f2e08669f0774b9137c2a3bef9b31ca6",
+        }
+
     def test_production_app_refuses_to_start_without_cors_origins(self, make_app):
         with pytest.raises(RuntimeError):
             make_app("production")

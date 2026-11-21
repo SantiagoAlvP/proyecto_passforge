@@ -17,6 +17,7 @@ APP_ENV_VARS = (
     "RATELIMIT_STORAGE_URI",
     "TRUST_PROXY",
     "LOG_LEVEL",
+    "APP_VERSION",
 )
 
 

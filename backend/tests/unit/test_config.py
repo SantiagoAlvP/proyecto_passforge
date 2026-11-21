@@ -106,6 +106,7 @@ class TestGetConfig:
         monkeypatch.setenv("RATELIMIT_STORAGE_URI", "redis://redis:6379")
         monkeypatch.setenv("TRUST_PROXY", "true")
         monkeypatch.setenv("LOG_LEVEL", "warning")
+        monkeypatch.setenv("APP_VERSION", "3f2a9c1")
 
         # Act
         config = get_config("testing")
@@ -116,6 +117,7 @@ class TestGetConfig:
         assert config.RATELIMIT_STORAGE_URI == "redis://redis:6379"
         assert config.TRUST_PROXY is True
         assert config.LOG_LEVEL == "WARNING"
+        assert config.APP_VERSION == "3f2a9c1"
 
     def test_uses_safe_defaults_when_variables_are_missing(self):
         config = get_config("testing")
@@ -124,6 +126,7 @@ class TestGetConfig:
         assert config.RATELIMIT_STORAGE_URI == "memory://"
         assert config.TRUST_PROXY is False
         assert config.MAX_CONTENT_LENGTH == 2 * 1024
+        assert config.APP_VERSION == "local"
 
 
 class TestProductionConfigValidation:

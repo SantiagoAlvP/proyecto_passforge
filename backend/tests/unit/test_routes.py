@@ -44,11 +44,21 @@ def service_calls(monkeypatch):
 
 
 class TestHealthRoute:
-    def test_returns_ok(self, client):
+    def test_returns_ok_and_local_version_by_default(self, client):
         response = client.get(f"{API}/health")
 
         assert response.status_code == 200
-        assert response.get_json() == {"status": "ok"}
+        assert response.get_json() == {"status": "ok", "version": "local"}
+
+    def test_reports_the_deployed_version(self, make_app):
+        # Arrange: en AWS, el pipeline de CD define APP_VERSION con el SHA
+        client = make_app(env={"APP_VERSION": "3f2a9c1"}).test_client()
+
+        # Act
+        response = client.get(f"{API}/health")
+
+        # Assert
+        assert response.get_json()["version"] == "3f2a9c1"
 
 
 class TestOptionsRoute:

@@ -4,7 +4,7 @@ Las rutas son delgadas: reciben la petición, delegan la validación en
 ``validators`` y la lógica en ``services``, y devuelven JSON.
 
 Endpoints:
-    GET  /api/v1/health              Estado del servicio.
+    GET  /api/v1/health              Estado del servicio y versión desplegada.
     GET  /api/v1/passwords/options   Política y opciones admitidas.
     POST /api/v1/passwords/generate  Genera una contraseña aleatoria.
     POST /api/v1/passwords/strength  Evalúa la fortaleza de una contraseña.
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Blueprint, Response, abort, jsonify, request
+from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from app.errors import ValidationError
 from app.extensions import limiter
@@ -40,8 +40,12 @@ def _get_json_object() -> dict[str, Any]:
 @api_bp.get("/health")
 @limiter.exempt
 def health() -> Response:
-    """Permite a balanceadores y orquestadores (Docker) saber si la API vive."""
-    return jsonify(status="ok")
+    """Estado del servicio y versión desplegada.
+
+    Lo usan el balanceador (ALB), Docker y el pipeline de CD, que espera a que
+    ``version`` coincida con el SHA del commit que acaba de desplegar.
+    """
+    return jsonify(status="ok", version=current_app.config["APP_VERSION"])
 
 
 @api_bp.get("/passwords/options")

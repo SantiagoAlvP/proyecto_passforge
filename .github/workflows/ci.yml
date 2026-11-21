@@ -71,19 +71,33 @@ jobs:
       - name: Run Flake8 (Linter)
         run: flake8 backend/app backend/wsgi.py --exit-zero --output-file=flake8-report.txt
 
+      # Bloquea: los Dockerfiles son nuestros y se pueden corregir.
       - name: Scan Dockerfiles for misconfigurations (Trivy)
         run: >
           docker run --rm -v "$PWD:/src:ro" "$TRIVY_IMAGE"
-          config --severity HIGH,CRITICAL --exit-code 1 /src
+          config --misconfig-scanners dockerfile
+          --severity HIGH,CRITICAL --exit-code 1 /src
 
-      - name: Upload lint reports
+      # Solo reporta: la infraestructura del Learner Lab (ALB público por HTTP,
+      # security groups abiertos) tiene hallazgos que no se pueden corregir allí.
+      - name: Scan infrastructure as code (Trivy, report only)
+        run: |
+          mkdir -p security-reports
+          docker run --rm -v "$PWD:/src:ro" -v "$PWD/security-reports:/reports" \
+            "$TRIVY_IMAGE" config --misconfig-scanners terraform \
+            --severity HIGH,CRITICAL --exit-code 0 --output /reports/trivy-iac.txt /src
+          cat security-reports/trivy-iac.txt
+
+      - name: Upload static analysis reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: lint-reports
+          name: static-analysis-reports
+          if-no-files-found: ignore
           path: |
             pylint-report.txt
             flake8-report.txt
+            security-reports/
 
   # ------------------------------------------------------------------------- #
   # 2. Pruebas unitarias, modulares y de integración + cobertura (>= 80 %)
@@ -139,10 +153,10 @@ jobs:
         with:
           fetch-depth: 0 # Historial completo: SonarCloud lo usa para el código nuevo
 
-      - name: Download lint reports
+      - name: Download static analysis reports
         uses: actions/download-artifact@v8
         with:
-          name: lint-reports
+          name: static-analysis-reports
           path: .
 
       - name: Download test reports
@@ -252,6 +266,12 @@ jobs:
     needs: [sonarcloud, build-and-acceptance]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
+    # Imágenes publicadas (etiqueta = SHA) para los jobs de despliegue (CD):
+    #   needs.release.outputs.backend_image / frontend_image / image_tag
+    outputs:
+      backend_image: ${{ steps.push.outputs.backend_image }}
+      frontend_image: ${{ steps.push.outputs.frontend_image }}
+      image_tag: ${{ steps.push.outputs.image_tag }}
     steps:
       - name: Download tested images
         uses: actions/download-artifact@v8
@@ -268,6 +288,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push Docker images
+        id: push
         run: |
           tags="$IMAGE_TAG"
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then
@@ -285,3 +306,10 @@ jobs:
               echo "- \`$image:$tag\`" >> "$GITHUB_STEP_SUMMARY"
             done
           done
+
+          # Salidas del job: las usará el CD para desplegar exactamente esta versión.
+          {
+            echo "backend_image=$BACKEND_IMAGE:$IMAGE_TAG"
+            echo "frontend_image=$FRONTEND_IMAGE:$IMAGE_TAG"
+            echo "image_tag=$IMAGE_TAG"
+          } >> "$GITHUB_OUTPUT"

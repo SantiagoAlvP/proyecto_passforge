@@ -123,11 +123,11 @@ flowchart LR
 
 | Job | Etapa | Qué hace | Herramientas |
 |---|---|---|---|
-| `static-analysis` | Test (estáticas) | Verifica formato, genera reportes de linters y revisa la configuración de los Dockerfiles | Black, Pylint, Flake8, Trivy |
+| `static-analysis` | Test (estáticas) | Verifica formato, genera reportes de linters, revisa los Dockerfiles y reporta la seguridad de la infraestructura (Terraform) | Black, Pylint, Flake8, Trivy |
 | `tests` | Test (unitarias y cobertura) | 246 pruebas unitarias, modulares y de integración; falla si la cobertura es < 80 % | pytest, pytest-cov, pytest-html |
 | `sonarcloud` | Test (estáticas) | Análisis continuo de calidad y seguridad de los dos componentes; falla si el Quality Gate no pasa | SonarCloud |
 | `build-and-acceptance` | Build + Test | Construye las dos imágenes, busca vulnerabilidades, levanta la app y ejecuta las pruebas de aceptación sobre los contenedores | Docker, Docker Compose, Trivy, Selenium |
-| `release` | Release | Publica en Docker Hub **las mismas imágenes probadas** (sin reconstruirlas) | Docker Hub |
+| `release` | Release | Publica en Docker Hub **las mismas imágenes probadas** (sin reconstruirlas) y las entrega al CD como salidas del job | Docker Hub |
 
 ### Ramas y eventos
 
@@ -150,6 +150,7 @@ verde.
 | Black | Sí, si hay código sin formatear |
 | Pylint y Flake8 | No por hallazgos (`--exit-zero`); SonarCloud decide con el Quality Gate |
 | Trivy (Dockerfiles) | Sí, con hallazgos HIGH o CRITICAL |
+| Trivy (Terraform en `infra/`) | No: solo reporta. El Learner Lab obliga a un ALB público por HTTP y security groups abiertos, que Trivy marca como HIGH/CRITICAL |
 | Pruebas y cobertura | Sí, si una prueba falla o la cobertura es < 80 % |
 | Trivy (imágenes) | Sí, con vulnerabilidades CRITICAL que tienen solución |
 | Pruebas de aceptación | Sí, si la app empaquetada no se comporta como espera el usuario |
@@ -158,6 +159,22 @@ verde.
 
 Los reportes (pruebas, cobertura, linters, aceptación y seguridad) quedan en
 **Artifacts** de cada ejecución.
+
+### Contrato con el CD
+
+Lo que el pipeline de CI entrega para desplegar:
+
+| | Backend | Frontend |
+|---|---|---|
+| Imagen | `<DOCKERHUB_USERNAME>/passforge-backend:<sha>` | `<DOCKERHUB_USERNAME>/passforge-frontend:<sha>` |
+| Salida del job `release` | `needs.release.outputs.backend_image` | `needs.release.outputs.frontend_image` |
+| Puerto | 8000 | 8080 |
+| Health check | `/api/v1/health` → `{"status": "ok", "version": "<APP_VERSION>"}` | `/health` → `{"status": "ok"}` |
+| Variables de entorno | `CORS_ORIGINS` (obligatoria: URL pública), `TRUST_PROXY=true` (detrás del ALB), `APP_VERSION=<sha>` | `API_BASE_URL` (por defecto `/api/v1`, mismo origen) |
+
+La etiqueta (SHA del commit) también está en `needs.release.outputs.image_tag`.
+Para confirmar que un ambiente ya corre la versión nueva, se espera a que
+`/api/v1/health` responda con `"version": "<sha>"`.
 
 ### Configuración necesaria en GitHub
 

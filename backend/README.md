@@ -40,7 +40,7 @@ privilegios. `CORS_ORIGINS` es obligatorio: sin él, la app no arranca.
 
 | Método | Ruta                           | Descripción                                   |
 |--------|--------------------------------|-----------------------------------------------|
-| GET    | `/api/v1/health`               | Estado del servicio (`{"status": "ok"}`).     |
+| GET    | `/api/v1/health`               | Estado y versión (`{"status": "ok", "version": "<APP_VERSION>"}`). |
 | GET    | `/api/v1/passwords/options`    | Política: longitudes y conjuntos de caracteres.|
 | POST   | `/api/v1/passwords/generate`   | Genera una contraseña aleatoria.              |
 | POST   | `/api/v1/passwords/strength`   | Evalúa la fortaleza de una contraseña.        |
