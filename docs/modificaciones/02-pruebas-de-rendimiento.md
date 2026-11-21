@@ -21,11 +21,13 @@ flowchart LR
     ds["deploy-staging"] --> ts["test-staging<br/>(aceptación)"]
     ts --> perf["performance-staging<br/>(k6)"]
     perf -->|umbrales OK| dp["deploy-production"]
-    perf -->|umbral roto| stop["El pipeline se detiene<br/>(no llega a Producción)"]
+    perf -->|umbral roto| stop["Rollback automático de staging<br/>(no llega a Producción)"]
 ```
 
-`performance.yml` es un **workflow reutilizable** (`workflow_call`): el CD lo
-llama con la URL del ALB de Staging. También se puede lanzar a mano desde
+`performance.yml` es un **workflow reutilizable** (`workflow_call`): el job
+`performance-staging` de `cd.yml` lo llama con la URL del ALB de Staging y el
+SHA del commit desplegado. `deploy-production` depende de él, y si falla se
+activa `rollback-staging`. También se puede lanzar a mano desde
 **Actions → Performance Tests**.
 
 ### Escenarios (perfil `gate`, ~2 minutos)
@@ -34,7 +36,7 @@ llama con la URL del ALB de Staging. También se puede lanzar a mano desde
 |---|---|---|
 | `carga` | Sube a 20 usuarios virtuales concurrentes sobre `/api/v1/health` | Latencia y errores del ALB + backend bajo concurrencia |
 | `funcional` | Genera y evalúa contraseñas (20 por minuto, por debajo del rate limit) | Respuestas correctas (longitud, fortaleza, label) y latencia |
-| `rate_limit` | Ráfaga de 100 peticiones a `/passwords/generate` | Que la protección contra abuso responda **429** |
+| `rate_limit` | Ráfaga de 200 peticiones a `/passwords/generate` | Que la protección contra abuso responda **429** |
 
 ### Umbrales (si uno se rompe, k6 sale con error y el pipeline falla)
 
@@ -66,7 +68,10 @@ http_req_failed: 0.00% 0 out of 5577
 La app usa `RATELIMIT_STORAGE_URI=memory://`: cada **worker de Gunicorn** (2 por
 contenedor) guarda su propio contador. En la prueba local, de 100 peticiones
 seguidas pasaron 60 (2 workers × 30/min) y 40 recibieron 429. En AWS, con
-varias tareas de ECS, el límite real es `30 × workers × tareas`. La solución en
+varias tareas de ECS, el límite real es `30 × workers × tareas`: con el
+autoescalado (hasta 3 tareas) llega a 180, por eso la ráfaga es de 200 (una de
+100 no recibiría ningún 429 con 2 o más tareas y la compuerta fallaría sin que
+la app tuviera un problema). La solución en
 producción sería un almacenamiento compartido (Redis / ElastiCache), como ya
 anticipa `backend/.env.example`. k6 lo deja medido y visible.
 

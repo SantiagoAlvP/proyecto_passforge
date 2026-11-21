@@ -2,8 +2,8 @@
 # Pipeline de Entrega Continua (CD) de PassForge.
 #
 #   IaC (validar + ECR) -> Artefacto (Docker Hub -> ECR) -> Deploy staging
-#     -> Pruebas pre-prod -> [aprobación manual] -> Deploy production
-#     -> Pruebas post-prod (smoke)
+#     -> Pruebas pre-prod -> Rendimiento (k6) -> [aprobación manual]
+#     -> Deploy production -> Pruebas post-prod (smoke)
 #   Si un deploy o sus pruebas fallan -> rollback automático a la imagen anterior.
 #   Rollback manual (botón de pánico): ver rollback.yml
 name: CD
@@ -223,14 +223,29 @@ jobs:
             --level preprod --expected-version "$SHA"
 
   # ---------------------------------------------------------------------------
-  # 4b. Rollback automático de staging si el deploy o las pruebas fallan
+  # 4b. Pruebas de rendimiento (k6) contra staging: compuerta antes de producción
+  #     (modificación 2). Si se rompe un umbral, la versión no se promueve.
+  # ---------------------------------------------------------------------------
+  performance-staging:
+    name: Rendimiento · staging (k6)
+    needs: [deploy-staging, test-staging]
+    uses: ./.github/workflows/performance.yml
+    with:
+      base_url: ${{ needs.deploy-staging.outputs.alb_url }}
+      # Mismo commit que se despliega (en "with" no está disponible env.SHA)
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # 4c. Rollback automático de staging si el deploy o las pruebas fallan
   # ---------------------------------------------------------------------------
   rollback-staging:
     name: Rollback automático · staging
-    needs: [deploy-staging, test-staging]
+    needs: [deploy-staging, test-staging, performance-staging]
     if: >-
       always() &&
-      (needs.deploy-staging.result == 'failure' || needs.test-staging.result == 'failure') &&
+      (needs.deploy-staging.result == 'failure' ||
+       needs.test-staging.result == 'failure' ||
+       needs.performance-staging.result == 'failure') &&
       needs.deploy-staging.outputs.previous_backend_image != ''
     runs-on: ubuntu-latest
 
@@ -267,7 +282,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy · production
-    needs: [release-images, test-staging]
+    needs: [release-images, test-staging, performance-staging]
     runs-on: ubuntu-latest
     environment:
       name: production

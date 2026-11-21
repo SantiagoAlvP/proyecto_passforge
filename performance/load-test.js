@@ -8,7 +8,7 @@
 //   BASE_URL      URL del ambiente, sin "/" al final (ALB: /api/* va al backend)
 //                 ej: http://passforge-staging-alb-123.us-east-1.elb.amazonaws.com
 //   API_PREFIX    prefijo de la API (por defecto /api/v1)
-//   RATE_LIMIT_BURST  peticiones de la ráfaga del escenario rate_limit (100)
+//   RATE_LIMIT_BURST  peticiones de la ráfaga del escenario rate_limit (200)
 //   TEST_PROFILE  "gate" (por defecto): prueba corta que decide si se promueve.
 //                 "stress": carga sostenida para demostrar el autoescalado.
 //
@@ -27,7 +27,7 @@ import { Counter } from "k6/metrics";
 const BASE_URL = (__ENV.BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const API = `${BASE_URL}${__ENV.API_PREFIX || "/api/v1"}`;
 const PROFILE = __ENV.TEST_PROFILE || "gate";
-const BURST = parseInt(__ENV.RATE_LIMIT_BURST || "100", 10);
+const BURST = parseInt(__ENV.RATE_LIMIT_BURST || "200", 10);
 
 const JSON_HEADERS = { headers: { "Content-Type": "application/json" } };
 const rateLimited = new Counter("rate_limited_responses");
@@ -140,7 +140,9 @@ export function rafagaRateLimit() {
   // llegar respuestas 429. Aquí 429 es un resultado ESPERADO, no un error.
   // Ojo: con RATELIMIT_STORAGE_URI=memory:// cada worker de Gunicorn (2 por
   // tarea) y cada tarea de ECS lleva su propio contador, así que el límite real
-  // es 30 x workers x tareas. Por eso la ráfaga es de 100 por defecto.
+  // es 30 x workers x tareas. Con el autoescalado (máximo 3 tareas) puede
+  // llegar a 30 x 2 x 3 = 180, por eso la ráfaga es de 200 por defecto: así
+  // siempre llegan respuestas 429, tenga el servicio 1 o 3 tareas.
   const params = {
     ...JSON_HEADERS,
     tags: { endpoint: "generate" },

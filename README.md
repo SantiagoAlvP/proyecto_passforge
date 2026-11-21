@@ -234,6 +234,7 @@ reutilizable [`.github/actions/terraform-deploy`](.github/actions/terraform-depl
 | `release-images` | Artefacto | **Promueve** las imágenes que el CI probó y publicó en Docker Hub (tag = SHA) a ECR, sin reconstruirlas |
 | `deploy-staging` | Deploy | `terraform apply` del workspace `staging` con las imágenes del commit; guarda las imágenes anteriores para el rollback |
 | `test-staging` | Pruebas pre-prod | 11 pruebas contra el ALB de staging; antes espera a que `/api/v1/health` informe la versión nueva (el SHA del commit) |
+| `performance-staging` | Pruebas pre-prod (rendimiento) | k6 contra staging: latencia p95, tasa de errores, validaciones funcionales y rate limit activo. Si se rompe un umbral, no se promueve a producción ([modificación 2](docs/modificaciones/02-pruebas-de-rendimiento.md)) |
 | `deploy-production` | Deploy | Requiere **aprobación manual** (environment `production`); despliega la misma imagen probada en staging |
 | `test-production` | Pruebas post-prod | 4 pruebas de humo contra producción, incluida la versión desplegada |
 | `rollback-staging` / `rollback-production` | Rollback | Si el despliegue o sus pruebas fallan, vuelve automáticamente a las imágenes anteriores |
