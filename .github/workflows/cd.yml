@@ -1,0 +1,342 @@
+# .github/workflows/cd.yml
+# Pipeline de Entrega Continua (CD) de PassForge.
+#
+#   IaC (validar + ECR) -> Artefacto en ECR -> Deploy staging -> Pruebas pre-prod
+#     -> [aprobación manual] -> Deploy production -> Pruebas post-prod (smoke)
+#   Si un deploy o sus pruebas fallan -> rollback automático a la imagen anterior.
+#   Rollback manual (botón de pánico): ver rollback.yml
+name: CD
+
+on:
+  # Se ejecuta cuando el CI termina en main (lo filtra el "if" del primer job)
+  workflow_run:
+    workflows: ["CI"]  # Debe coincidir con el "name:" del workflow de CI
+    types: [completed]
+    branches: [main]
+  # TEMPORAL: permite probar el CD desde la rama mientras se integra con el CI
+  push:
+    branches: [feature/cd]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: 'Simular una falla en las pruebas de producción (demo del rollback)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Un solo despliegue a la vez, compartido con rollback.yml. Una ejecución nueva
+# espera a que termine la anterior: nunca se corta un terraform apply a la mitad.
+concurrency:
+  group: passforge-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: '1.15.8'
+  # Commit que se despliega: el que probó el CI (workflow_run) o el del push
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  # Falla simulada: por el botón manual o con "[simular-falla]" en el commit
+  SIMULATE_FAILURE: ${{ inputs.simulate_failure == true || contains(github.event.head_commit.message, '[simular-falla]') || contains(github.event.workflow_run.head_commit.message, '[simular-falla]') }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. IaC: validar todo el Terraform y aplicar la infraestructura compartida
+  # ---------------------------------------------------------------------------
+  iac-shared:
+    name: IaC · validar y aplicar ECR
+    # Si viene del CI, solo continúa cuando el CI terminó con éxito
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      backend_repo: ${{ steps.ecr.outputs.backend_repo }}
+      frontend_repo: ${{ steps.ecr.outputs.frontend_repo }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Format check
+        run: terraform fmt -check -recursive infra
+
+      - name: Terraform Validate (app)
+        working-directory: infra/app
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Terraform Apply (ECR compartido)
+        working-directory: infra/ecr
+        run: |
+          terraform init -input=false -backend-config=backend.hcl
+          terraform validate
+          terraform apply -auto-approve -input=false
+
+      - name: Get ECR repositories
+        id: ecr
+        working-directory: infra/ecr
+        run: |
+          echo "backend_repo=$(terraform output -raw backend_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "frontend_repo=$(terraform output -raw frontend_repository_url)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 2. Artefacto: confirmar que las imágenes del commit están en ECR
+  # ---------------------------------------------------------------------------
+  release-images:
+    name: Artefacto · imágenes en ECR
+    needs: iac-shared
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.images.outputs.backend_image }}
+      frontend_image: ${{ steps.images.outputs.frontend_image }}
+    env:
+      BACKEND_REPO: ${{ needs.iac-shared.outputs.backend_repo }}
+      FRONTEND_REPO: ${{ needs.iac-shared.outputs.frontend_repo }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # El CI publica las imágenes (paso Release). Si no están (p. ej. al probar
+      # desde feature/cd), se construyen aquí una sola vez con el mismo tag.
+      - name: Ensure images exist for this commit
+        id: images
+        run: |
+          for component in backend frontend; do
+            if aws ecr describe-images --repository-name "passforge-${component}" \
+                 --image-ids imageTag="$SHA" > /dev/null 2>&1; then
+              echo "passforge-${component}:${SHA} ya existe en ECR (publicada por el CI)"
+            else
+              echo "passforge-${component}:${SHA} no existe: se construye y publica"
+              repo_var="$(echo "${component}" | tr '[:lower:]' '[:upper:]')_REPO"
+              repo="${!repo_var}"
+              docker build -t "${repo}:${SHA}" "./${component}"
+              docker push "${repo}:${SHA}"
+            fi
+          done
+          echo "backend_image=${BACKEND_REPO}:${SHA}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${FRONTEND_REPO}:${SHA}" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 3. Deploy a Staging
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy · staging
+    needs: release-images
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.alb_url }}
+    outputs:
+      alb_url: ${{ steps.deploy.outputs.alb_url }}
+      previous_backend_image: ${{ steps.deploy.outputs.previous_backend_image }}
+      previous_frontend_image: ${{ steps.deploy.outputs.previous_frontend_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Deploy with Terraform
+        id: deploy
+        uses: ./.github/actions/terraform-deploy
+        with:
+          environment: staging
+          backend_image: ${{ needs.release-images.outputs.backend_image }}
+          frontend_image: ${{ needs.release-images.outputs.frontend_image }}
+          app_version: ${{ env.SHA }}
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          tf_version: ${{ env.TF_VERSION }}
+
+  # ---------------------------------------------------------------------------
+  # 4. Pruebas Pre-Prod (completas, contra staging)
+  # ---------------------------------------------------------------------------
+  test-staging:
+    name: Pruebas pre-prod · staging
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Run pre-prod tests against Staging
+        run: python3 scripts/smoke_test.py "${{ needs.deploy-staging.outputs.alb_url }}" --level preprod
+
+  # ---------------------------------------------------------------------------
+  # 4b. Rollback automático de staging si el deploy o las pruebas fallan
+  # ---------------------------------------------------------------------------
+  rollback-staging:
+    name: Rollback automático · staging
+    needs: [deploy-staging, test-staging]
+    if: >-
+      always() &&
+      (needs.deploy-staging.result == 'failure' || needs.test-staging.result == 'failure') &&
+      needs.deploy-staging.outputs.previous_backend_image != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Get previous version
+        id: prev
+        env:
+          PREV_BACKEND: ${{ needs.deploy-staging.outputs.previous_backend_image }}
+        run: echo "version=${PREV_BACKEND##*:}" >> "$GITHUB_OUTPUT"
+
+      - name: Roll back to previous images
+        id: rollback
+        uses: ./.github/actions/terraform-deploy
+        with:
+          environment: staging
+          backend_image: ${{ needs.deploy-staging.outputs.previous_backend_image }}
+          frontend_image: ${{ needs.deploy-staging.outputs.previous_frontend_image }}
+          app_version: ${{ steps.prev.outputs.version }}
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          tf_version: ${{ env.TF_VERSION }}
+
+      - name: Verify rolled-back version
+        run: python3 scripts/smoke_test.py "${{ steps.rollback.outputs.alb_url }}" --level postprod
+
+  # ---------------------------------------------------------------------------
+  # 5. Deploy a Production (requiere aprobación: environment "production")
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy · production
+    needs: [release-images, test-staging]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.alb_url }}
+    outputs:
+      alb_url: ${{ steps.deploy.outputs.alb_url }}
+      previous_backend_image: ${{ steps.deploy.outputs.previous_backend_image }}
+      previous_frontend_image: ${{ steps.deploy.outputs.previous_frontend_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      # Exactamente la misma imagen que pasó las pruebas en staging
+      - name: Deploy with Terraform
+        id: deploy
+        uses: ./.github/actions/terraform-deploy
+        with:
+          environment: production
+          backend_image: ${{ needs.release-images.outputs.backend_image }}
+          frontend_image: ${{ needs.release-images.outputs.frontend_image }}
+          app_version: ${{ env.SHA }}
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          tf_version: ${{ env.TF_VERSION }}
+
+  # ---------------------------------------------------------------------------
+  # 6. Pruebas Post-Prod (smoke tests, contra production)
+  # ---------------------------------------------------------------------------
+  test-production:
+    name: Pruebas post-prod · production
+    needs: deploy-production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Run smoke tests against Production
+        run: |
+          extra=""
+          if [ "$SIMULATE_FAILURE" = "true" ]; then
+            echo "::warning::Falla simulada activada: se probará el rollback automático"
+            extra="--simulate-failure"
+          fi
+          python3 scripts/smoke_test.py "${{ needs.deploy-production.outputs.alb_url }}" --level postprod $extra
+
+  # ---------------------------------------------------------------------------
+  # 6b. Rollback automático de production si el deploy o los smoke tests fallan
+  # ---------------------------------------------------------------------------
+  rollback-production:
+    name: Rollback automático · production
+    needs: [deploy-production, test-production]
+    if: >-
+      always() &&
+      (needs.deploy-production.result == 'failure' || needs.test-production.result == 'failure') &&
+      needs.deploy-production.outputs.previous_backend_image != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Get previous version
+        id: prev
+        env:
+          PREV_BACKEND: ${{ needs.deploy-production.outputs.previous_backend_image }}
+        run: echo "version=${PREV_BACKEND##*:}" >> "$GITHUB_OUTPUT"
+
+      - name: Roll back to previous images
+        id: rollback
+        uses: ./.github/actions/terraform-deploy
+        with:
+          environment: production
+          backend_image: ${{ needs.deploy-production.outputs.previous_backend_image }}
+          frontend_image: ${{ needs.deploy-production.outputs.previous_frontend_image }}
+          app_version: ${{ steps.prev.outputs.version }}
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          tf_version: ${{ env.TF_VERSION }}
+
+      - name: Verify rolled-back version
+        run: python3 scripts/smoke_test.py "${{ steps.rollback.outputs.alb_url }}" --level postprod

@@ -1,0 +1,118 @@
+# .github/workflows/rollback.yml
+# Rollback manual ("botón de pánico"): vuelve un ambiente a una versión anterior.
+# Actions -> Rollback manual -> Run workflow
+#   - Sin versión: vuelve a la última versión distinta de la que está corriendo.
+#   - Con versión: despliega ese SHA (debe existir en ECR).
+name: Rollback manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Ambiente a revertir'
+        type: choice
+        options: [production, staging]
+        default: production
+      version:
+        description: 'SHA a restaurar (vacío = versión anterior a la actual)'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+# Comparte el grupo con cd.yml: nunca corre al mismo tiempo que un despliegue
+concurrency:
+  group: passforge-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: '1.15.8'
+
+jobs:
+  rollback:
+    name: Rollback manual · ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
+
+      - name: Resolve target version
+        id: target
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          cluster="passforge-${ENV_NAME}-cluster"
+          current_td=$(aws ecs describe-services --cluster "$cluster" \
+            --services "passforge-${ENV_NAME}-backend" \
+            --query "services[0].taskDefinition" --output text)
+          current_image=$(aws ecs describe-task-definition --task-definition "$current_td" \
+            --query "taskDefinition.containerDefinitions[0].image" --output text)
+          repo_backend="${current_image%:*}"
+          repo_frontend="${repo_backend%passforge-backend}passforge-frontend"
+          current_version="${current_image##*:}"
+          echo "Versión actual en ${ENV_NAME}: ${current_version}"
+
+          if [ -n "$REQUESTED" ]; then
+            target="$REQUESTED"
+          else
+            # Recorre las revisiones anteriores de la task definition hasta
+            # encontrar una imagen distinta a la actual
+            family="${current_td##*/}"; family="${family%:*}"
+            revision="${current_td##*:}"
+            target=""
+            while [ "$revision" -gt 1 ]; do
+              revision=$((revision - 1))
+              image=$(aws ecs describe-task-definition --task-definition "${family}:${revision}" \
+                --query "taskDefinition.containerDefinitions[0].image" --output text 2>/dev/null || true)
+              if [ -n "$image" ] && [ "$image" != "None" ] && [ "${image##*:}" != "$current_version" ]; then
+                target="${image##*:}"
+                break
+              fi
+            done
+            if [ -z "$target" ]; then
+              echo "::error::No hay una versión anterior a la que volver en ${ENV_NAME}"
+              exit 1
+            fi
+          fi
+
+          for component in backend frontend; do
+            if ! aws ecr describe-images --repository-name "passforge-${component}" \
+                 --image-ids imageTag="$target" > /dev/null 2>&1; then
+              echo "::error::La imagen passforge-${component}:${target} no existe en ECR"
+              exit 1
+            fi
+          done
+
+          echo "Rollback de ${ENV_NAME}: ${current_version} -> ${target}"
+          echo "version=${target}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${repo_backend}:${target}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${repo_frontend}:${target}" >> "$GITHUB_OUTPUT"
+
+      - name: Roll back with Terraform
+        id: rollback
+        uses: ./.github/actions/terraform-deploy
+        with:
+          environment: ${{ inputs.environment }}
+          backend_image: ${{ steps.target.outputs.backend_image }}
+          frontend_image: ${{ steps.target.outputs.frontend_image }}
+          app_version: ${{ steps.target.outputs.version }}
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          tf_version: ${{ env.TF_VERSION }}
+
+      - name: Verify rolled-back version
+        run: python3 scripts/smoke_test.py "${{ steps.rollback.outputs.alb_url }}" --level postprod

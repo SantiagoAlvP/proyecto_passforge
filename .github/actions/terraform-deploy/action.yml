@@ -1,0 +1,108 @@
+# .github/actions/terraform-deploy/action.yml
+# Despliega (o hace rollback de) un ambiente de PassForge con Terraform.
+# Lo usan cd.yml (deploy y rollback automático) y rollback.yml (botón de pánico).
+name: Terraform deploy de PassForge
+description: >
+  Aplica infra/app en el workspace del ambiente con las imágenes indicadas y
+  devuelve la URL del ALB y las imágenes que estaban desplegadas antes.
+
+inputs:
+  environment:
+    description: staging o production
+    required: true
+  backend_image:
+    description: URI completa de la imagen del backend (repo:tag)
+    required: true
+  frontend_image:
+    description: URI completa de la imagen del frontend (repo:tag)
+    required: true
+  app_version:
+    description: Versión que se despliega (SHA del commit)
+    required: true
+  aws_access_key_id:
+    required: true
+  aws_secret_access_key:
+    required: true
+  aws_session_token:
+    required: true
+  aws_region:
+    required: false
+    default: us-east-1
+  tf_version:
+    required: false
+    default: '1.15.8'
+
+outputs:
+  alb_url:
+    description: URL pública del ambiente
+    value: ${{ steps.outputs.outputs.alb_url }}
+  previous_backend_image:
+    description: Imagen del backend que estaba desplegada antes (vacío si no había)
+    value: ${{ steps.previous.outputs.backend }}
+  previous_frontend_image:
+    description: Imagen del frontend que estaba desplegada antes (vacío si no había)
+    value: ${{ steps.previous.outputs.frontend }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        aws-access-key-id: ${{ inputs.aws_access_key_id }}
+        aws-secret-access-key: ${{ inputs.aws_secret_access_key }}
+        aws-session-token: ${{ inputs.aws_session_token }}
+        aws-region: ${{ inputs.aws_region }}
+        # Las URI de ECR incluyen el ID de la cuenta y se pasan entre jobs
+        mask-aws-account-id: false
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: ${{ inputs.tf_version }}
+        terraform_wrapper: false  # Permite leer "terraform output" sin texto extra
+
+    # Se guarda lo que está corriendo ANTES de desplegar: es el destino del rollback
+    - name: Save currently deployed images
+      id: previous
+      shell: bash
+      env:
+        ENV_NAME: ${{ inputs.environment }}
+      run: |
+        cluster="passforge-${ENV_NAME}-cluster"
+        for component in backend frontend; do
+          task_def=$(aws ecs describe-services --cluster "$cluster" \
+            --services "passforge-${ENV_NAME}-${component}" \
+            --query "services[?status=='ACTIVE'].taskDefinition | [0]" \
+            --output text 2>/dev/null || true)
+          image=""
+          if [ -n "$task_def" ] && [ "$task_def" != "None" ]; then
+            image=$(aws ecs describe-task-definition --task-definition "$task_def" \
+              --query "taskDefinition.containerDefinitions[0].image" --output text)
+          fi
+          echo "Imagen actual de ${component}: ${image:-ninguna (primer despliegue)}"
+          echo "${component}=${image}" >> "$GITHUB_OUTPUT"
+        done
+
+    - name: Terraform Init
+      shell: bash
+      working-directory: infra/app
+      run: |
+        terraform init -input=false -backend-config=backend.hcl
+        terraform workspace select -or-create "${{ inputs.environment }}"
+
+    - name: Terraform Apply
+      shell: bash
+      working-directory: infra/app
+      env:
+        TF_VAR_environment_name: ${{ inputs.environment }}
+        TF_VAR_backend_image_uri: ${{ inputs.backend_image }}
+        TF_VAR_frontend_image_uri: ${{ inputs.frontend_image }}
+        TF_VAR_app_version: ${{ inputs.app_version }}
+      run: terraform apply -auto-approve -input=false
+
+    - name: Get Terraform Outputs
+      id: outputs
+      shell: bash
+      working-directory: infra/app
+      run: echo "alb_url=$(terraform output -raw alb_url)" >> "$GITHUB_OUTPUT"
