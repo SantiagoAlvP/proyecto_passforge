@@ -28,3 +28,10 @@ node_modules/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
