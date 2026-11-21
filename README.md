@@ -13,9 +13,10 @@ completo de CI/CD desplegado en AWS.
 
 | Nombre completo | Usuario de GitHub | Rol |
 |---|---|---|
-| _(completar)_ | [@SantiagoAlvP](https://github.com/SantiagoAlvP) | Propietario del repositorio |
-| _(completar)_ | [@tomechava](https://github.com/tomechava) | Colaborador |
-| _(completar)_ | [@imKorr](https://github.com/imKorr) | Colaborador |
+| Santiago Alvarez | [@SantiagoAlvP](https://github.com/SantiagoAlvP) | Propietario del repositorio |
+| Emmanuel Correa | [@imKorr](https://github.com/imKorr) | Colaborador |
+| Tomás Echavarria | [@tomechava](https://github.com/tomechava) | Colaborador |
+| José David Toro | [@josedtf](https://github.com/josedtf) | Colaborador |
 
 ## Arquitectura
 
