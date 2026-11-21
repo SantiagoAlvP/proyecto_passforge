@@ -18,3 +18,7 @@ output "frontend_service_name" {
   description = "Nombre del servicio ECS del frontend"
   value       = aws_ecs_service.frontend.name
 }
+output "backend_autoscaling" {
+  description = "Rango de tareas del backend (autoescalado)"
+  value       = var.enable_autoscaling ? "${var.backend_min_tasks}-${var.backend_max_tasks} tareas (CPU ${var.backend_cpu_target}% / ${var.backend_requests_per_task_target} req por tarea por minuto)" : "desactivado"
+}
