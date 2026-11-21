@@ -1,0 +1,110 @@
+# Pruebas de rendimiento con k6 (modificación 2 del proyecto final).
+#
+# Es un workflow REUTILIZABLE: el pipeline de CD lo llama después de desplegar
+# en Staging y ANTES de Producción. Si k6 rompe un umbral (latencia p95, tasa de
+# errores, validaciones funcionales o rate limit inactivo), el job falla y la
+# versión no se promueve.
+#
+#   deploy-staging ─> test-staging ─> performance-staging ─> deploy-production
+#
+# Uso desde el CD (cd.yml):
+#
+#   performance-staging:
+#     needs: [deploy-staging, test-staging]
+#     uses: ./.github/workflows/performance.yml
+#     with:
+#       base_url: ${{ needs.deploy-staging.outputs.alb_url }}
+#
+# También se puede lanzar a mano (Actions -> Performance Tests -> Run workflow),
+# por ejemplo con el perfil "stress" para demostrar el autoescalado del backend.
+
+name: Performance Tests
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        description: URL del ambiente (ALB), sin "/" al final
+        required: true
+        type: string
+      profile:
+        description: '"gate" (decide la promoción) o "stress" (carga sostenida)'
+        required: false
+        type: string
+        default: gate
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: URL del ambiente (ALB), sin "/" al final
+        required: true
+        type: string
+      profile:
+        description: Perfil de carga
+        required: true
+        type: choice
+        options: [gate, stress]
+        default: gate
+
+permissions:
+  contents: read
+
+env:
+  K6_IMAGE: grafana/k6:2.3.0
+
+jobs:
+  k6:
+    name: k6 (${{ inputs.profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Wait for the environment
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "$BASE_URL/api/v1/health" > /dev/null; then
+              echo "Ambiente disponible: $BASE_URL"
+              exit 0
+            fi
+            echo "Intento $i: el ambiente aún no responde, esperando 10s..."
+            sleep 10
+          done
+          echo "El ambiente no respondió en 5 minutos" && exit 1
+
+      - name: Run k6
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          TEST_PROFILE: ${{ inputs.profile }}
+        run: |
+          mkdir -p performance-reports
+          docker run --rm --user "$(id -u)" \
+            -v "$PWD/performance:/scripts:ro" \
+            -v "$PWD/performance-reports:/reports" \
+            -e BASE_URL -e TEST_PROFILE \
+            "$K6_IMAGE" run \
+            --summary-export=/reports/k6-summary.json \
+            /scripts/load-test.js | tee performance-reports/k6-output.txt
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## Pruebas de rendimiento (k6) — perfil \`${{ inputs.profile }}\`"
+            echo
+            echo "Ambiente: ${{ inputs.base_url }}"
+            echo
+            echo '```'
+            sed -n '/TOTAL RESULTS/,$p' performance-reports/k6-output.txt 2>/dev/null || echo "Sin resultados"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload k6 reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-reports-${{ inputs.profile }}
+          if-no-files-found: ignore
+          path: performance-reports/
