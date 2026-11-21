@@ -113,19 +113,15 @@ Archivo: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (GitHub Actions)
 flowchart LR
     A[Checkout] --> SA[static-analysis<br/>Black · Pylint · Flake8<br/>Trivy config]
     A --> T[tests<br/>pytest unit · module · integration<br/>cobertura ≥ 80 %]
-    SA --> S[sonarcloud<br/>Quality Gate]
-    T --> S
     SA --> B[build-and-acceptance<br/>docker build x2 · Trivy image<br/>docker compose · Selenium]
     T --> B
-    S --> R[release<br/>docker push a Docker Hub]
-    B --> R
+    B --> R[release<br/>docker push a Docker Hub]
 ```
 
 | Job | Etapa | Qué hace | Herramientas |
 |---|---|---|---|
-| `static-analysis` | Test (estáticas) | Verifica formato, genera reportes de linters, revisa los Dockerfiles y reporta la seguridad de la infraestructura (Terraform) | Black, Pylint, Flake8, Trivy |
-| `tests` | Test (unitarias y cobertura) | 246 pruebas unitarias, modulares y de integración; falla si la cobertura es < 80 % | pytest, pytest-cov, pytest-html |
-| `sonarcloud` | Test (estáticas) | Análisis continuo de calidad y seguridad de los dos componentes; falla si el Quality Gate no pasa | SonarCloud |
+| `static-analysis` | Test (estáticas) | Verifica formato y calidad del código (Pylint ≥ 9/10, Flake8 sin hallazgos), revisa los Dockerfiles y reporta la seguridad de la infraestructura (Terraform) | Black, Pylint, Flake8, Trivy |
+| `tests` | Test (unitarias y cobertura) | 248 pruebas unitarias, modulares y de integración; falla si la cobertura es < 80 % | pytest, pytest-cov, pytest-html |
 | `build-and-acceptance` | Build + Test | Construye las dos imágenes, busca vulnerabilidades, levanta la app y ejecuta las pruebas de aceptación sobre los contenedores | Docker, Docker Compose, Trivy, Selenium |
 | `release` | Release | Publica en Docker Hub **las mismas imágenes probadas** (sin reconstruirlas) y las entrega al CD como salidas del job | Docker Hub |
 
@@ -148,13 +144,13 @@ verde.
 | Paso | ¿Detiene el pipeline? |
 |---|---|
 | Black | Sí, si hay código sin formatear |
-| Pylint y Flake8 | No por hallazgos (`--exit-zero`); SonarCloud decide con el Quality Gate |
+| Pylint | Sí, si la nota baja de 9/10 |
+| Flake8 | Sí, con cualquier hallazgo (estilo PEP 8 o error lógico) |
 | Trivy (Dockerfiles) | Sí, con hallazgos HIGH o CRITICAL |
 | Trivy (Terraform en `infra/`) | No: solo reporta. El Learner Lab obliga a un ALB público por HTTP y security groups abiertos, que Trivy marca como HIGH/CRITICAL |
 | Pruebas y cobertura | Sí, si una prueba falla o la cobertura es < 80 % |
 | Trivy (imágenes) | Sí, con vulnerabilidades CRITICAL que tienen solución |
 | Pruebas de aceptación | Sí, si la app empaquetada no se comporta como espera el usuario |
-| SonarCloud | Sí, si el Quality Gate no es `Passed` |
 | Release | Solo en push a `main` o tag, y solo si todo lo anterior pasó |
 
 Los reportes (pruebas, cobertura, linters, aceptación y seguridad) quedan en
@@ -182,18 +178,11 @@ Para confirmar que un ambiente ya corre la versión nueva, se espera a que
 
 | Tipo | Nombre | Valor |
 |---|---|---|
-| Secret | `SONAR_TOKEN` | Token de SonarCloud |
 | Secret | `DOCKERHUB_TOKEN` | Personal Access Token de Docker Hub (Read & Write) |
 | Variable | `DOCKERHUB_USERNAME` | Usuario (Docker ID) de Docker Hub |
-| Variable | `SONAR_HOST_URL` | `https://sonarcloud.io` |
-
-**SonarCloud:** importar el repositorio, desactivar *Automatic Analysis*,
-*New code* = 30 días, proyecto público, y verificar que `sonar.projectKey` y
-`sonar.organization` de [`sonar-project.properties`](sonar-project.properties)
-coincidan con los del proyecto.
 
 **Protección de `main`** (Settings → Rules → Rulesets): PR obligatorio con 1
-aprobación y checks requeridos `static-analysis`, `tests`, `sonarcloud` y
+aprobación y checks requeridos `static-analysis`, `tests` y
 `build-and-acceptance`.
 
 ### Cambios respecto al pipeline del taller
@@ -220,7 +209,6 @@ passforge/
 ├── frontend/                  # interfaz web (nginx) + Dockerfile
 ├── acceptance/                # pruebas de aceptación (Selenium)
 ├── docker-compose.yml         # la app completa con Docker
-├── sonar-project.properties   # configuración de SonarCloud
 ├── .flake8
 └── README.md
 ```

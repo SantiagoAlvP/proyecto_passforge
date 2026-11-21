@@ -9,8 +9,10 @@
 # Etapas: Checkout -> Build -> Test (estáticas, unitarias, cobertura,
 #         aceptación, seguridad) -> Release (imágenes Docker en Docker Hub).
 #
-#   static-analysis ─┬─> sonarcloud ──────────┬─> release
-#   tests ───────────┴─> build-and-acceptance ┘
+#   static-analysis ─┬─> build-and-acceptance ─> release
+#   tests ───────────┘
+#
+# Al terminar con éxito en main, se dispara el pipeline de CD (cd.yml).
 
 name: CI Pipeline
 
@@ -65,11 +67,13 @@ jobs:
       - name: Run Black (Formatter)
         run: black --check backend
 
+      # Falla si la nota de Pylint baja de 9/10 (el reporte se guarda igual).
       - name: Run Pylint (Linter)
-        run: pylint backend/app backend/wsgi.py --exit-zero --output-format=text > pylint-report.txt
+        run: pylint backend/app backend/wsgi.py --fail-under=9.0 --output-format=text | tee pylint-report.txt
 
+      # Falla con cualquier hallazgo de estilo (PEP 8) o error lógico.
       - name: Run Flake8 (Linter)
-        run: flake8 backend/app backend/wsgi.py --exit-zero --output-file=flake8-report.txt
+        run: flake8 backend/app backend/wsgi.py --tee --output-file=flake8-report.txt
 
       # Bloquea: los Dockerfiles son nuestros y se pueden corregir.
       - name: Scan Dockerfiles for misconfigurations (Trivy)
@@ -142,37 +146,7 @@ jobs:
             backend/report.html
 
   # ------------------------------------------------------------------------- #
-  # 3. SonarCloud: análisis continuo y Quality Gate
-  # ------------------------------------------------------------------------- #
-  sonarcloud:
-    needs: [static-analysis, tests]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # Historial completo: SonarCloud lo usa para el código nuevo
-
-      - name: Download static analysis reports
-        uses: actions/download-artifact@v8
-        with:
-          name: static-analysis-reports
-          path: .
-
-      - name: Download test reports
-        uses: actions/download-artifact@v8
-        with:
-          name: test-reports
-          path: backend
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v8
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-
-  # ------------------------------------------------------------------------- #
-  # 4. Build de las imágenes, escaneo de seguridad y pruebas de aceptación
+  # 3. Build de las imágenes, escaneo de seguridad y pruebas de aceptación
   # ------------------------------------------------------------------------- #
   build-and-acceptance:
     needs: [static-analysis, tests]
@@ -260,10 +234,10 @@ jobs:
             security-reports/
 
   # ------------------------------------------------------------------------- #
-  # 5. Release: publica en Docker Hub las imágenes que pasaron TODO
+  # 4. Release: publica en Docker Hub las imágenes que pasaron TODO
   # ------------------------------------------------------------------------- #
   release:
-    needs: [sonarcloud, build-and-acceptance]
+    needs: [static-analysis, tests, build-and-acceptance]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     # Imágenes publicadas (etiqueta = SHA) para los jobs de despliegue (CD):
