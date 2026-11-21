@@ -329,6 +329,17 @@ aprobación y checks requeridos `static-analysis`, `tests` y
 7. **Cuatro niveles de pruebas automatizadas** antes de desplegar (unitarias,
    modulares, integración y aceptación) y dos después (pre-prod y post-prod).
 
+## Modificaciones al pipeline y la arquitectura
+
+Las tres modificaciones del proyecto final (además del mínimo de CI/CD). Cada
+una entra por su propio Pull Request y está documentada en `docs/modificaciones/`:
+
+| # | Modificación | Tipo | Dónde |
+|---|---|---|---|
+| 1 | [Versionado semántico automático y GitHub Releases](docs/modificaciones/01-versionado-semantico.md) | Pipeline | `.github/workflows/release.yml` |
+| 2 | [Pruebas de rendimiento con k6 antes de Producción](docs/modificaciones/02-pruebas-de-rendimiento.md) | Pipeline | `.github/workflows/performance.yml`, `performance/` |
+| 3 | [Autoescalado del backend en ECS](docs/modificaciones/03-autoescalado.md) | Arquitectura | `infra/app/autoscaling.tf` |
+
 ## Estructura
 
 ```

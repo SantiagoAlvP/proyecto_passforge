@@ -1,0 +1,116 @@
+# Versionado semántico automático y GitHub Releases (modificación de pipeline).
+#
+# Cuándo corre: cada vez que el "CI Pipeline" termina en verde por un push a main
+# (es decir, después de cada merge de un Pull Request).
+#
+# Qué hace:
+#   1. Calcula la siguiente versión vMAYOR.MENOR.PARCHE a partir de los mensajes
+#      de commit (Conventional Commits: feat -> MENOR, fix/otros -> PARCHE,
+#      "!" o "BREAKING CHANGE" -> MAYOR).
+#   2. Crea el tag y un GitHub Release con el changelog agrupado por tipo.
+#   3. Re-etiqueta en Docker Hub las imágenes que el CI ya probó y publicó con
+#      el SHA, agregándoles la etiqueta de la versión (X.Y.Z). No se reconstruye
+#      nada: es exactamente la misma imagen (mismo digest).
+#
+#   push a main ──> CI Pipeline (verde) ──> Release (vX.Y.Z) ──> imágenes :X.Y.Z
+#
+# Nota: el tag lo crea GITHUB_TOKEN, así que NO vuelve a disparar el CI (GitHub
+# no encadena workflows con ese token). Por eso este workflow re-etiqueta las
+# imágenes en vez de esperar a que el CI las publique por el tag.
+
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
+  # Manual: versiona el último commit de main (sus imágenes ya deben existir).
+  workflow_dispatch:
+
+# Dos releases nunca corren a la vez: cada versión parte del tag anterior.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BACKEND_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/passforge-backend
+  FRONTEND_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/passforge-frontend
+
+jobs:
+  release:
+    # Solo si el CI terminó en verde y fue por un push (merge), no por un PR.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # crear el tag y el GitHub Release
+    outputs:
+      version: ${{ steps.version.outputs.next }}
+    steps:
+      - name: Checkout (commit que pasó el CI)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0 # historial y tags completos para calcular la versión
+
+      - name: Calculate next version
+        id: version
+        run: |
+          chmod +x .github/scripts/*.sh
+          .github/scripts/next-version.sh HEAD | tee -a "$GITHUB_OUTPUT"
+
+      - name: Nothing to release
+        if: steps.version.outputs.bump == 'none'
+        run: echo "El commit ya tiene la versión ${{ steps.version.outputs.next }}. No hay nada que publicar." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Login to Docker Hub
+        if: steps.version.outputs.bump != 'none'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag tested images with the version
+        if: steps.version.outputs.bump != 'none'
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE"; do
+            # Falla si el CI no publicó la imagen de este commit.
+            docker buildx imagetools inspect "$image:$sha" > /dev/null
+            # Nueva etiqueta que apunta al MISMO manifiesto (sin reconstruir).
+            docker buildx imagetools create --tag "$image:${VERSION#v}" "$image:$sha"
+            echo "- \`$image:${VERSION#v}\` = \`$image:$sha\`" >> image-tags.md
+          done
+
+      - name: Create tag and GitHub Release
+        if: steps.version.outputs.bump != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.next }}
+          PREVIOUS: ${{ steps.version.outputs.previous }}
+        run: |
+          .github/scripts/changelog.sh "$PREVIOUS" HEAD \
+            "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$VERSION" > release-notes.md
+          {
+            echo "Versión anterior: \`$PREVIOUS\` · Incremento: **${{ steps.version.outputs.bump }}**"
+            echo
+            cat release-notes.md
+          } > body.md
+          gh release create "$VERSION" \
+            --target "$(git rev-parse HEAD)" \
+            --title "PassForge $VERSION" \
+            --notes-file body.md
+
+          {
+            echo "## Release $VERSION"
+            echo
+            cat body.md
+          } >> "$GITHUB_STEP_SUMMARY"
